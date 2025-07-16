@@ -479,6 +479,12 @@ data/
 - **Updated**: PDF output filename changed to `resolution_comparison.pdf`
 - **Enhanced**: Cleaner, focused interface with single-purpose functionality
 
+### Version 1.4.1
+- **Updated**: All functions now defer plot display - plots are created but not shown automatically
+- **Changed**: Removed `plt.show()` calls from all analysis functions
+- **Enhanced**: Users can control when to display plots by calling `plt.show()` manually
+- **Improved**: Better workflow control - analysis completes without interrupting with plot windows
+
 ### Version 1.4.0
 - **Updated**: Set `axis='equal'` for all visualizations to ensure proper aspect ratio
 - **Enhanced**: `routine_resolution_comparison()` displays file sizes for each resolution
