@@ -19,20 +19,18 @@ PEMTRON_warpage/
 ### Basic Usage
 
 ```python
-# Run routine resolution comparison (recommended)
+# Run resolution comparison analysis
 python main_analysis.py
 
-# Or import specific functions
-from main_analysis import quick_analysis, compare_resolutions, routine_resolution_comparison
+# Or import the function
+from main_analysis import compare_resolution
+import matplotlib.pyplot as plt
 
-# Analyze single resolution
-quick_analysis('30')
+# Run resolution comparison
+compare_resolution()
 
-# Compare two resolutions
-compare_resolutions('30', '120')
-
-# Run routine comparison
-routine_resolution_comparison()
+# Display plots when ready
+plt.show()
 ```
 
 ## 📚 Module Documentation
@@ -231,50 +229,25 @@ routine_resolution_comparison()
   pdf_path = export_single_resolution_pdf('./단일보드', '30', 'resolution_30um.pdf')
   ```
 
-### 5. `main_analysis.py` - Main Analysis Script
+### 5. `main_analysis.py` - Resolution Comparison Analysis
 
 #### Functions:
 
-**`routine_resolution_comparison()`**
-- **NEW**: Routine for comparing results w.r.t. different resolutions
-- Displays file sizes, uses consistent scaling, defers graph display until end
+**`compare_resolution()`**
+- Main function for comparing results w.r.t. different resolutions
+- Displays file sizes, uses consistent scaling, creates plots but doesn't display them automatically
+- Analyzes all resolutions (30μm, 60μm, 90μm, 120μm) and exports PDF
 - **Example**:
   ```python
-  from main_analysis import routine_resolution_comparison
-  routine_resolution_comparison()  # Recommended routine
-  ```
-
-**`main()`**
-- Runs comprehensive analysis for all resolutions
-- Loads data, creates visualizations with consistent scaling, and exports PDFs
-- **Example**:
-  ```python
-  from main_analysis import main
-  main()  # Runs complete analysis
-  ```
-
-**`quick_analysis(resolution)`**
-- Quick analysis for single resolution with file size display
-- **Args**: `resolution` (str) - Resolution folder name
-- **Example**:
-  ```python
-  from main_analysis import quick_analysis
-  quick_analysis('30')  # Analyzes 30μm resolution
-  ```
-
-**`compare_resolutions(resolution1, resolution2)`**
-- Compares two specific resolutions with consistent scaling
-- **Args**: 
-  - `resolution1` (str) - First resolution to compare
-  - `resolution2` (str) - Second resolution to compare
-- **Example**:
-  ```python
-  from main_analysis import compare_resolutions
-  compare_resolutions('30', '120')  # Compares 30μm vs 120μm
+  from main_analysis import compare_resolution
+  import matplotlib.pyplot as plt
+  
+  compare_resolution()  # Run analysis
+  plt.show()  # Display plots when ready
   ```
 
 **`get_file_size(file_path)`**
-- **NEW**: Get file size in human-readable format
+- Get file size in human-readable format
 - **Args**: `file_path` (str) - Path to file
 - **Returns**: `str` - File size (e.g., "1.23 MB")
 - **Example**:
@@ -285,13 +258,14 @@ routine_resolution_comparison()
 
 ## 🔧 Advanced Usage Examples
 
-### Routine Resolution Comparison (Recommended)
+### Resolution Comparison Analysis
 
 ```python
-from main_analysis import routine_resolution_comparison
+from main_analysis import compare_resolution
+import matplotlib.pyplot as plt
 
-# Run the standard routine for resolution comparison
-routine_resolution_comparison()
+# Run the resolution comparison analysis
+compare_resolution()
 # This will:
 # 1. Load all resolution data with file size info
 # 2. Calculate global color range for consistent scaling
@@ -299,7 +273,10 @@ routine_resolution_comparison()
 # 4. Display file information table
 # 5. Show statistical comparison
 # 6. Export PDF with consistent scaling
-# 7. Display visualization at the end
+# 7. Create visualization (but not display it yet)
+
+# Display plots when ready
+plt.show()
 ```
 
 ### Custom Center Region Extraction
@@ -462,7 +439,7 @@ data/
 - **Center Region Focus**: Analyzes most important part of warpage data
 - **High-Resolution Output**: 300 DPI PDF exports
 - **Consistent Scaling**: Same x,y scale for all graphs for proper comparison
-- **Deferred Display**: Graphs shown only at the end for better workflow
+- **Deferred Display**: Graphs are created but not shown automatically - user controls when to display
 - **File Size Reporting**: Displays file sizes in human-readable format
 - **Future-Ready**: Statistics functions available for future same-resolution comparisons
 - **Routine Functions**: Specialized routines for different analysis types
@@ -491,4 +468,20 @@ data/
 - Use `quick_analysis()` for single resolution analysis
 - Process resolutions individually for large datasets
 - Adjust `row_fraction` and `col_fraction` to reduce data size
-- Use lower DPI for faster PDF generation during development 
+- Use lower DPI for faster PDF generation during development
+
+## 📝 Version History
+
+### Version 1.5.0 (Current)
+- **Simplified**: Removed `main()`, `quick_analysis()`, and `compare_resolutions()` functions
+- **Renamed**: `routine_resolution_comparison()` → `compare_resolution()` 
+- **Streamlined**: Only one main function for resolution comparison analysis
+- **Updated**: PDF output filename changed to `resolution_comparison.pdf`
+- **Enhanced**: Cleaner, focused interface with single-purpose functionality
+
+### Version 1.4.0
+- **Updated**: Set `axis='equal'` for all visualizations to ensure proper aspect ratio
+- **Enhanced**: `routine_resolution_comparison()` displays file sizes for each resolution
+- **Improved**: Consistent axis scaling with equal aspect ratios across all plots
+- **Fixed**: Removed `aspect='auto'` parameter from imshow functions
+- **Added**: Equal aspect ratio ensures accurate representation of warpage data geometry

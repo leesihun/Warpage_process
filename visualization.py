@@ -30,8 +30,9 @@ def create_comparison_plot(resolution_data, figsize=(20, 5), vmin=None, vmax=Non
     
     for i, (resolution, (data, stats, filename)) in enumerate(resolution_data.items()):
         if data is not None:
-            im = axes[i].imshow(data, cmap='jet', aspect='auto', vmin=vmin, vmax=vmax)
+            im = axes[i].imshow(data, cmap='jet', vmin=vmin, vmax=vmax)
             axes[i].set_title(f'{resolution}μm Resolution\\n{filename}', fontweight='bold')
+            axes[i].set_aspect('equal')
             
             # Set consistent axis limits
             axes[i].set_xlim(0, max_cols)
@@ -66,8 +67,9 @@ def create_individual_plot(resolution, data, stats, filename, figsize=(8, 6), vm
     """
     fig, ax = plt.subplots(figsize=figsize)
     
-    im = ax.imshow(data, cmap='jet', aspect='auto', vmin=vmin, vmax=vmax)
+    im = ax.imshow(data, cmap='jet', vmin=vmin, vmax=vmax)
     ax.set_title(f'{resolution}μm Resolution - Center Region\\n{filename}', fontweight='bold', fontsize=14)
+    ax.set_aspect('equal')
     
     # Set consistent axis scaling
     ax.set_xlim(0, data.shape[1])
@@ -232,8 +234,9 @@ def create_same_resolution_comparison(data_dict, resolution, figsize=(20, 5), vm
     
     for i, (dataset_name, (data, stats, filename)) in enumerate(data_dict.items()):
         if data is not None:
-            im = axes[i].imshow(data, cmap='jet', aspect='auto', vmin=vmin, vmax=vmax)
+            im = axes[i].imshow(data, cmap='jet', vmin=vmin, vmax=vmax)
             axes[i].set_title(f'{dataset_name}\\n{filename}', fontweight='bold')
+            axes[i].set_aspect('equal')
             
             # Set consistent axis limits
             axes[i].set_xlim(0, max_cols)
