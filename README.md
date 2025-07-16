@@ -235,9 +235,18 @@ routine_resolution_comparison()
 
 #### Functions:
 
+**`routine_resolution_comparison()`**
+- **NEW**: Routine for comparing results w.r.t. different resolutions
+- Displays file sizes, uses consistent scaling, defers graph display until end
+- **Example**:
+  ```python
+  from main_analysis import routine_resolution_comparison
+  routine_resolution_comparison()  # Recommended routine
+  ```
+
 **`main()`**
 - Runs comprehensive analysis for all resolutions
-- Loads data, performs statistical analysis, creates visualizations, and exports PDFs
+- Loads data, creates visualizations with consistent scaling, and exports PDFs
 - **Example**:
   ```python
   from main_analysis import main
@@ -245,7 +254,7 @@ routine_resolution_comparison()
   ```
 
 **`quick_analysis(resolution)`**
-- Quick analysis for single resolution
+- Quick analysis for single resolution with file size display
 - **Args**: `resolution` (str) - Resolution folder name
 - **Example**:
   ```python
@@ -254,7 +263,7 @@ routine_resolution_comparison()
   ```
 
 **`compare_resolutions(resolution1, resolution2)`**
-- Compares two specific resolutions
+- Compares two specific resolutions with consistent scaling
 - **Args**: 
   - `resolution1` (str) - First resolution to compare
   - `resolution2` (str) - Second resolution to compare
@@ -264,7 +273,34 @@ routine_resolution_comparison()
   compare_resolutions('30', '120')  # Compares 30μm vs 120μm
   ```
 
+**`get_file_size(file_path)`**
+- **NEW**: Get file size in human-readable format
+- **Args**: `file_path` (str) - Path to file
+- **Returns**: `str` - File size (e.g., "1.23 MB")
+- **Example**:
+  ```python
+  from main_analysis import get_file_size
+  size = get_file_size('data.txt')  # Returns "1.23 KB"
+  ```
+
 ## 🔧 Advanced Usage Examples
+
+### Routine Resolution Comparison (Recommended)
+
+```python
+from main_analysis import routine_resolution_comparison
+
+# Run the standard routine for resolution comparison
+routine_resolution_comparison()
+# This will:
+# 1. Load all resolution data with file size info
+# 2. Calculate global color range for consistent scaling
+# 3. Create comparison visualization
+# 4. Display file information table
+# 5. Show statistical comparison
+# 6. Export PDF with consistent scaling
+# 7. Display visualization at the end
+```
 
 ### Custom Center Region Extraction
 
@@ -272,65 +308,85 @@ routine_resolution_comparison()
 from data_loader import load_data_from_file, extract_center_region
 
 # Load full data
-full_data = load_data_from_file('./단일보드/30/20250716114413@_ORI.txt')
+full_data = load_data_from_file('./data/단일보드/30/20250716114413@_ORI.txt')
 
 # Extract different center regions
 small_center = extract_center_region(full_data, row_fraction=0.2, col_fraction=0.3)
 large_center = extract_center_region(full_data, row_fraction=0.6, col_fraction=0.7)
 ```
 
-### Custom Visualization
+### Custom Visualization with Consistent Scaling
 
 ```python
 from data_loader import process_resolution_data
 from visualization import create_individual_plot
 from statistics_utils import find_optimal_color_range
+from main_analysis import get_file_size
 import matplotlib.pyplot as plt
 
 # Load data for multiple resolutions
 resolution_data = {}
 for res in ['30', '60', '90', '120']:
-    center_data, stats, filename = process_resolution_data('./단일보드', res)
+    center_data, stats, filename = process_resolution_data('./data/단일보드', res)
     if center_data is not None:
         resolution_data[res] = (center_data, stats, filename)
+        
+        # Display file size info
+        file_path = f'./data/단일보드/{res}/{filename}'
+        file_size = get_file_size(file_path)
+        print(f"{res}μm: {filename} ({file_size})")
 
-# Find optimal color range
+# Find optimal color range for consistent scaling
 data_only = {k: v[0] for k, v in resolution_data.items()}
 vmin, vmax = find_optimal_color_range(data_only)
+print(f"Global color range: {vmin:.6f} to {vmax:.6f}")
 
-# Create custom plots with consistent color scaling
+# Create custom plots with consistent color and axis scaling
+figures = []
 for res, (data, stats, filename) in resolution_data.items():
     fig = create_individual_plot(res, data, stats, filename, 
                                figsize=(12, 10), vmin=vmin, vmax=vmax)
+    figures.append(fig)
     plt.savefig(f'custom_plot_{res}um.png', dpi=300, bbox_inches='tight')
+
+# Display all figures at the end
+for fig in figures:
+    plt.figure(fig.number)
     plt.show()
 ```
 
-### Batch PDF Export
+### Batch PDF Export with File Size Info
 
 ```python
 from pdf_exporter import export_to_pdf, export_single_resolution_pdf
+from main_analysis import get_file_size
 
-# Export complete analysis
-complete_pdf = export_to_pdf('./단일보드', ['30', '60', '90', '120'], 
+# Export complete analysis (no stats/3D for cleaner output)
+complete_pdf = export_to_pdf('./data/단일보드', ['30', '60', '90', '120'], 
                            output_filename='complete_analysis.pdf',
-                           include_stats=True, include_3d=True, dpi=300)
+                           include_stats=False, include_3d=False, dpi=300)
+
+if complete_pdf:
+    pdf_size = get_file_size(complete_pdf)
+    print(f"Complete analysis PDF: {complete_pdf} ({pdf_size})")
 
 # Export individual resolution PDFs
 for resolution in ['30', '60', '90', '120']:
-    individual_pdf = export_single_resolution_pdf('./단일보드', resolution, 
+    individual_pdf = export_single_resolution_pdf('./data/단일보드', resolution, 
                                                  f'analysis_{resolution}um.pdf', dpi=300)
-    print(f"Exported: {individual_pdf}")
+    if individual_pdf:
+        pdf_size = get_file_size(individual_pdf)
+        print(f"Exported: {individual_pdf} ({pdf_size})")
 ```
 
-### Statistical Analysis
+### Statistical Analysis (Available for Future Use)
 
 ```python
 from statistics_utils import collect_resolution_statistics, calculate_statistics
 from data_loader import process_resolution_data
 
 # Collect statistics for all resolutions
-resolutions, stats_data = collect_resolution_statistics('./단일보드', ['30', '60', '90', '120'])
+resolutions, stats_data = collect_resolution_statistics('./data/단일보드', ['30', '60', '90', '120'])
 
 # Find resolution with minimum warpage
 min_warpage_idx = stats_data['mean'].index(min(stats_data['mean']))
@@ -338,9 +394,29 @@ best_resolution = resolutions[min_warpage_idx]
 print(f"Best resolution (minimum warpage): {best_resolution}μm")
 
 # Calculate custom statistics for specific resolution
-center_data, _, _ = process_resolution_data('./단일보드', '30')
+center_data, _, _ = process_resolution_data('./data/단일보드', '30')
 custom_stats = calculate_statistics(center_data)
 print(f"30μm resolution statistics: {custom_stats}")
+```
+
+### Future: Same Resolution Comparison
+
+```python
+from data_loader import process_multiple_files_same_resolution
+from visualization import create_same_resolution_comparison
+from statistics_utils import find_optimal_color_range
+
+# For future use when comparing multiple files of same resolution
+resolution = '30'
+data_dict = process_multiple_files_same_resolution('./data/단일보드', resolution)
+
+# Find optimal color range
+data_only = {k: v[0] for k, v in data_dict.items()}
+vmin, vmax = find_optimal_color_range(data_only)
+
+# Create comparison plot
+fig = create_same_resolution_comparison(data_dict, resolution, vmin=vmin, vmax=vmax)
+plt.show()
 ```
 
 ## 📊 Output Files
@@ -368,15 +444,16 @@ from mpl_toolkits.mplot3d import Axes3D
 ## 📂 Data Structure Expected
 
 ```
-단일보드/
-├── 30/
-│   └── 20250716114413@_ORI.txt
-├── 60/
-│   └── 20250716114831@_ORI.txt
-├── 90/
-│   └── 20250716115134@_ORI.txt
-└── 120/
-    └── 20250716115218@_ORI.txt
+data/
+└── 단일보드/
+    ├── 30/
+    │   └── 20250716114413@_ORI.txt
+    ├── 60/
+    │   └── 20250716114831@_ORI.txt
+    ├── 90/
+    │   └── 20250716115134@_ORI.txt
+    └── 120/
+        └── 20250716115218@_ORI.txt
 ```
 
 ## 🎯 Key Features
@@ -384,9 +461,12 @@ from mpl_toolkits.mplot3d import Axes3D
 - **Modular Design**: Separate modules for different functionalities
 - **Center Region Focus**: Analyzes most important part of warpage data
 - **High-Resolution Output**: 300 DPI PDF exports
-- **Consistent Color Scaling**: Optimal color ranges for comparison
-- **Comprehensive Statistics**: Min, max, mean, std, range calculations
-- **Multiple Visualization Types**: 2D heatmaps, 3D surfaces, statistical plots
+- **Consistent Scaling**: Same x,y scale for all graphs for proper comparison
+- **Deferred Display**: Graphs shown only at the end for better workflow
+- **File Size Reporting**: Displays file sizes in human-readable format
+- **Future-Ready**: Statistics functions available for future same-resolution comparisons
+- **Routine Functions**: Specialized routines for different analysis types
+- **Optimal Color Ranges**: Consistent color scaling across all visualizations
 - **Error Handling**: Robust error handling and informative messages
 - **Flexible Usage**: Can be used as modules or standalone scripts
 
