@@ -6,8 +6,8 @@ A simple Python tool for analyzing warpage data across different resolutions. Th
 
 ```
 PEMTRON_warpage/
-├── warpage_analyzer.py    # Main analysis script (all-in-one solution)
-└── README.md              # This file
+├── warpage.py           # Main analysis script (all-in-one solution)
+└── README.md            # This file
 ```
 
 ## 🚀 Quick Start
@@ -16,32 +16,32 @@ PEMTRON_warpage/
 
 ```bash
 # Show help and available options
-python warpage_analyzer.py --help
+python warpage.py --help
 
 # Run with default settings
-python warpage_analyzer.py
+python warpage.py
 
 # Run with custom visualization settings
-python warpage_analyzer.py --cmap=plasma --vmin=-1500 --vmax=-800 --show
+python warpage.py --cmap=plasma --vmin=-1500 --vmax=-800 --show
 
 # Run with colorbar disabled
-python warpage_analyzer.py --no-colorbar
+python warpage.py --no-colorbar
 
 # Specify custom resolutions to analyze
-python warpage_analyzer.py --res=30,60,90,120
+python warpage.py --res=30,60,90,120
 
 # Specify custom output filename
-python warpage_analyzer.py --output=my_analysis.pdf
+python warpage.py --output=my_analysis.pdf
 
 # Run in interactive mode
-python warpage_analyzer.py --interactive
+python warpage.py --interactive
 ```
 
 ### Using as a Module
 
 ```python
 # Import the function
-from warpage_analyzer import analyze_warpage
+from warpage import analyze_warpage
 import matplotlib.pyplot as plt
 
 # Run analysis with default settings
