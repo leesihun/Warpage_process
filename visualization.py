@@ -2,7 +2,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-def create_comparison_plot(resolution_data, figsize=(20, 5), vmin=None, vmax=None):
+def create_comparison_plot(resolution_data, figsize=(20, 5), vmin=None, vmax=None, cmap='jet', colorbar=True):
     """
     Create a comparison plot showing all resolutions side by side with consistent scaling.
     
@@ -10,6 +10,8 @@ def create_comparison_plot(resolution_data, figsize=(20, 5), vmin=None, vmax=Non
         resolution_data (dict): Dictionary with resolution as key and (data, stats, filename) as value
         figsize (tuple): Figure size (width, height)
         vmin, vmax (float): Color scale limits
+        cmap (str): Colormap name
+        colorbar (bool): Whether to show colorbar
         
     Returns:
         matplotlib.figure.Figure: The created figure
@@ -30,7 +32,7 @@ def create_comparison_plot(resolution_data, figsize=(20, 5), vmin=None, vmax=Non
     
     for i, (resolution, (data, stats, filename)) in enumerate(resolution_data.items()):
         if data is not None:
-            im = axes[i].imshow(data, cmap='jet', vmin=vmin, vmax=vmax)
+            im = axes[i].imshow(data, cmap=cmap, vmin=vmin, vmax=vmax)
             axes[i].set_title(f'{resolution}μm Resolution\\n{filename}', fontweight='bold')
             axes[i].set_aspect('equal')
             
@@ -47,10 +49,13 @@ def create_comparison_plot(resolution_data, figsize=(20, 5), vmin=None, vmax=Non
             axes[i].text(0.02, 0.98, stats_text, transform=axes[i].transAxes, 
                         verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
     
+    # Note: No colorbar for comparison plot to keep it clean
+    # Individual plots will have colorbars when enabled
+    
     plt.tight_layout()
     return fig
 
-def create_individual_plot(resolution, data, stats, filename, figsize=(8, 6), vmin=None, vmax=None):
+def create_individual_plot(resolution, data, stats, filename, figsize=(8, 6), vmin=None, vmax=None, cmap='jet', colorbar=True):
     """
     Create an individual plot for a single resolution with consistent scaling.
     
@@ -61,13 +66,15 @@ def create_individual_plot(resolution, data, stats, filename, figsize=(8, 6), vm
         filename (str): Filename for title
         figsize (tuple): Figure size
         vmin, vmax (float): Color scale limits
+        cmap (str): Colormap name
+        colorbar (bool): Whether to show colorbar
         
     Returns:
         matplotlib.figure.Figure: The created figure
     """
     fig, ax = plt.subplots(figsize=figsize)
     
-    im = ax.imshow(data, cmap='jet', vmin=vmin, vmax=vmax)
+    im = ax.imshow(data, cmap=cmap, vmin=vmin, vmax=vmax)
     ax.set_title(f'{resolution}μm Resolution - Center Region\\n{filename}', fontweight='bold', fontsize=14)
     ax.set_aspect('equal')
     
@@ -83,6 +90,11 @@ def create_individual_plot(resolution, data, stats, filename, figsize=(8, 6), vm
     stats_text = f"Shape: {stats['shape']}\\nMin: {stats['min']:.6f}\\nMax: {stats['max']:.6f}\\nMean: {stats['mean']:.6f}\\nStd: {stats['std']:.6f}"
     ax.text(0.02, 0.98, stats_text, transform=ax.transAxes, 
             verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.9))
+    
+    # Add colorbar if requested
+    if colorbar:
+        cbar = fig.colorbar(im, ax=ax, shrink=0.8)
+        cbar.set_label('Warpage Value', fontsize=12)
     
     plt.tight_layout()
     return fig
@@ -204,7 +216,7 @@ def create_3d_surface_plot(resolution_data, figsize=(20, 15)):
     plt.tight_layout()
     return fig
 
-def create_same_resolution_comparison(data_dict, resolution, figsize=(20, 5), vmin=None, vmax=None):
+def create_same_resolution_comparison(data_dict, resolution, figsize=(20, 5), vmin=None, vmax=None, cmap='jet', colorbar=True):
     """
     Create comparison plot for multiple datasets of the same resolution.
     This function is designed for future use when comparing same resolutions.
@@ -214,6 +226,8 @@ def create_same_resolution_comparison(data_dict, resolution, figsize=(20, 5), vm
         resolution (str): Resolution value for all datasets
         figsize (tuple): Figure size (width, height)
         vmin, vmax (float): Color scale limits
+        cmap (str): Colormap name
+        colorbar (bool): Whether to show colorbar
         
     Returns:
         matplotlib.figure.Figure: The created figure
@@ -234,7 +248,7 @@ def create_same_resolution_comparison(data_dict, resolution, figsize=(20, 5), vm
     
     for i, (dataset_name, (data, stats, filename)) in enumerate(data_dict.items()):
         if data is not None:
-            im = axes[i].imshow(data, cmap='jet', vmin=vmin, vmax=vmax)
+            im = axes[i].imshow(data, cmap=cmap, vmin=vmin, vmax=vmax)
             axes[i].set_title(f'{dataset_name}\\n{filename}', fontweight='bold')
             axes[i].set_aspect('equal')
             
@@ -250,6 +264,13 @@ def create_same_resolution_comparison(data_dict, resolution, figsize=(20, 5), vm
             stats_text = f"Min: {stats['min']:.4f}\\nMax: {stats['max']:.4f}\\nMean: {stats['mean']:.4f}"
             axes[i].text(0.02, 0.98, stats_text, transform=axes[i].transAxes, 
                         verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+    
+    # Add colorbar if requested
+    if colorbar and len(data_dict) > 0:
+        # Create colorbar for the last image (they all have the same scale)
+        last_im = im  # im from the last iteration
+        cbar = fig.colorbar(last_im, ax=axes, orientation='horizontal', pad=0.1, shrink=0.8)
+        cbar.set_label('Warpage Value', fontsize=12)
     
     plt.tight_layout()
     return fig 

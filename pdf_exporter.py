@@ -19,7 +19,7 @@ def ensure_report_directory():
     return report_dir
 
 def export_to_pdf(base_path, resolution_folders, output_filename='warpage_analysis_center_region.pdf', 
-                  include_stats=True, include_3d=True, dpi=300):
+                  include_stats=True, include_3d=True, dpi=300, cmap='jet', colorbar=True, vmin=None, vmax=None):
     """
     Export comprehensive warpage analysis to high-resolution PDF in report directory.
     
@@ -30,6 +30,10 @@ def export_to_pdf(base_path, resolution_folders, output_filename='warpage_analys
         include_stats (bool): Whether to include statistical analysis plots
         include_3d (bool): Whether to include 3D surface plots
         dpi (int): DPI for high-resolution output
+        cmap (str): Colormap name
+        colorbar (bool): Whether to show colorbar
+        vmin (float, optional): Minimum value for color scale
+        vmax (float, optional): Maximum value for color scale
         
     Returns:
         str: Path to created PDF file
@@ -51,15 +55,20 @@ def export_to_pdf(base_path, resolution_folders, output_filename='warpage_analys
         print("No data found to export!")
         return None
     
-    # Find optimal color range
-    data_only = {k: v[0] for k, v in resolution_data.items()}
-    vmin, vmax = find_optimal_color_range(data_only)
+    # Find optimal color range if not provided
+    if vmin is None or vmax is None:
+        data_only = {k: v[0] for k, v in resolution_data.items()}
+        auto_vmin, auto_vmax = find_optimal_color_range(data_only)
+        if vmin is None:
+            vmin = auto_vmin
+        if vmax is None:
+            vmax = auto_vmax
     
     # Create PDF
     with PdfPages(full_output_path) as pdf:
         # Page 1: Comparison plot
         print("Creating comparison plot...")
-        comparison_fig = create_comparison_plot(resolution_data, figsize=(20, 5), vmin=vmin, vmax=vmax)
+        comparison_fig = create_comparison_plot(resolution_data, figsize=(20, 5), vmin=vmin, vmax=vmax, cmap=cmap, colorbar=colorbar)
         pdf.savefig(comparison_fig, dpi=dpi, bbox_inches='tight')
         comparison_fig.clear()
         
@@ -67,7 +76,7 @@ def export_to_pdf(base_path, resolution_folders, output_filename='warpage_analys
         print("Creating individual plots...")
         for resolution, (data, stats, filename) in resolution_data.items():
             individual_fig = create_individual_plot(resolution, data, stats, filename, 
-                                                  figsize=(10, 8), vmin=vmin, vmax=vmax)
+                                                  figsize=(10, 8), vmin=vmin, vmax=vmax, cmap=cmap, colorbar=colorbar)
             pdf.savefig(individual_fig, dpi=dpi, bbox_inches='tight')
             individual_fig.clear()
         

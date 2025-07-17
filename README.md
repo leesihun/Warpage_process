@@ -10,24 +10,58 @@ PEMTRON_warpage/
 ├── statistics_utils.py     # Statistical analysis functions  
 ├── visualization.py        # Plotting and visualization functions
 ├── pdf_exporter.py         # PDF export functions
+├── presets.py              # Visualization presets
 ├── main_analysis.py        # Main analysis script with routines
-└── README.md              # This file
+├── analyze.py              # Interactive preset selection script
+└── README.md               # This file
 ```
 
 ## 🚀 Quick Start
 
 ### Basic Usage
 
-```python
-# Run resolution comparison analysis
+#### Using Command Line with Analysis Presets
+
+```bash
+# Show available analysis presets and help
+python main_analysis.py --help
+
+# Run with default resolution comparison analysis
 python main_analysis.py
 
-# Or import the function
+# Run with specific analysis preset
+python main_analysis.py resolution_comparison
+
+# Run with visualization overrides
+python main_analysis.py resolution_comparison --cmap=plasma --vmin=-1500 --vmax=-800 --show
+
+# Run with colorbar disabled
+python main_analysis.py resolution_comparison --no-colorbar
+```
+
+#### Using Interactive Script
+
+```bash
+# Run the interactive script for guided analysis
+python analyze.py
+```
+
+#### Using as a Module
+
+```python
+# Import the function
 from main_analysis import compare_resolution
 import matplotlib.pyplot as plt
 
-# Run resolution comparison
-compare_resolution()
+# Run resolution comparison analysis with default settings
+fig = compare_resolution()
+
+# Run with custom visualization settings
+fig = compare_resolution(vmin=-1500, vmax=-800, cmap="plasma", colorbar=True)
+
+# Future: Run different analysis types when implemented
+# fig = compare_resolution("date_comparison")
+# fig = compare_resolution("batch_comparison")
 
 # Display plots when ready
 plt.show()
@@ -229,21 +263,84 @@ plt.show()
   pdf_path = export_single_resolution_pdf('./단일보드', '30', 'resolution_30um.pdf')
   ```
 
-### 5. `main_analysis.py` - Resolution Comparison Analysis
+### 5. `presets.py` - Analysis Presets
 
 #### Functions:
 
-**`compare_resolution()`**
-- Main function for comparing results w.r.t. different resolutions
-- Displays file sizes, uses consistent scaling, creates plots but doesn't display them automatically
-- Analyzes all resolutions (30μm, 60μm, 90μm, 120μm) and exports PDF
+**`list_presets()`**
+- Prints a list of all available analysis presets with their descriptions
+- **Example**:
+  ```python
+  from presets import list_presets
+  list_presets()  # Displays all available analysis presets
+  ```
+
+**`get_preset(preset_name)`**
+- Gets an analysis preset by name
+- **Args**: `preset_name` (str) - Name of the analysis preset
+- **Returns**: `dict` - Preset dictionary with analysis settings
+- **Example**:
+  ```python
+  from presets import get_preset
+  preset = get_preset("resolution_comparison")
+  print(preset["type"])  # Prints "resolution_comparison"
+  ```
+
+**`update_visualization_settings(preset_name, vmin=None, vmax=None, cmap=None, colorbar=None)`**
+- Updates visualization settings for an analysis preset
+- **Args**: 
+  - `preset_name` (str) - Name of the analysis preset
+  - `vmin` (float, optional) - Minimum value for color scale
+  - `vmax` (float, optional) - Maximum value for color scale
+  - `cmap` (str, optional) - Colormap name
+  - `colorbar` (bool, optional) - Whether to show colorbar
+- **Returns**: `dict` - Updated visualization settings
+- **Example**:
+  ```python
+  from presets import update_visualization_settings
+  vis_settings = update_visualization_settings("resolution_comparison", vmin=-1500, vmax=-800, cmap="plasma")
+  ```
+
+### 6. `main_analysis.py` - Resolution Comparison Analysis
+
+#### Functions:
+
+**`compare_resolution(preset_name="resolution_comparison", vmin=None, vmax=None, cmap=None, colorbar=None)`**
+- Main function for comparing results based on selected analysis type
+- Uses analysis presets with option to override visualization settings
+- Analyzes data according to the selected analysis type and exports PDF
+- **Args**:
+  - `preset_name` (str): Name of the analysis preset to use
+  - `vmin` (float, optional): Minimum value for color scale. Overrides default if provided
+  - `vmax` (float, optional): Maximum value for color scale. Overrides default if provided
+  - `cmap` (str, optional): Colormap name. Overrides default if provided
+  - `colorbar` (bool, optional): Whether to show colorbar. Overrides default if provided
+- **Returns**:
+  - `matplotlib.figure.Figure`: The created comparison figure
 - **Example**:
   ```python
   from main_analysis import compare_resolution
   import matplotlib.pyplot as plt
   
-  compare_resolution()  # Run analysis
+  # Using default analysis (resolution comparison)
+  fig = compare_resolution()
+  
+  # Using specific analysis with custom visualization
+  fig = compare_resolution("resolution_comparison", vmin=-1500, vmax=-800, cmap="plasma")
+  
+  # Future: Using other analysis types when implemented
+  # fig = compare_resolution("date_comparison")
+  
   plt.show()  # Display plots when ready
+  ```
+
+**`main()`**
+- Main function to handle command line arguments and run the analysis
+- Parses command line arguments and runs the analysis with the specified preset and options
+- **Example**:
+  ```python
+  from main_analysis import main
+  main()  # Runs the analysis with command line arguments
   ```
 
 **`get_file_size(file_path)`**
@@ -255,29 +352,170 @@ plt.show()
   from main_analysis import get_file_size
   size = get_file_size('data.txt')  # Returns "1.23 KB"
   ```
+  
+### 7. `analyze.py` - Interactive Preset Selection
+
+#### Functions:
+
+**`main()`**
+- Interactive function to demonstrate preset usage
+- Shows available presets, prompts for selection, and runs the analysis
+- **Example**:
+  ```python
+  from analyze import main
+  main()  # Runs the interactive preset selection
+  ```
+
+## 🎭 Analysis Presets
+
+The system includes analysis presets for different types of analyses:
+
+### Available Analysis Types
+
+| Name | Description | Status |
+|------|-------------|--------|
+| **Resolution Comparison** | Compare warpage data across different resolutions | Available |
+| **Date Comparison** | Compare warpage data across different dates | Coming Soon |
+| **Batch Comparison** | Compare warpage data across different batches | Coming Soon |
+| **Defect Analysis** | Analyze warpage data for defects | Coming Soon |
+
+### Using Analysis Presets
+
+```python
+# From Python code
+from main_analysis import compare_resolution
+fig = compare_resolution("resolution_comparison")  # Use resolution comparison
+```
+
+```bash
+# From command line
+python main_analysis.py resolution_comparison  # Run resolution comparison
+```
+
+### Visualization Settings
+
+All analysis presets use the following default visualization settings, which can be overridden:
+
+- **vmin/vmax**: Auto-calculated from data (None)
+- **cmap**: "jet" colormap
+- **colorbar**: Enabled (True)
+
+You can override these settings:
+
+```python
+# Override visualization settings
+fig = compare_resolution(vmin=-1500, vmax=-800, cmap="plasma", colorbar=False)
+```
+
+## 🎨 Available Colormaps
+
+The system supports various matplotlib colormaps for different visualization needs:
+
+### Scientific Colormaps (Recommended)
+- **`'viridis'`** - Perceptually uniform, good for scientific data
+- **`'plasma'`** - High contrast, good for highlighting variations
+- **`'inferno'`** - Dark background, good for presentations
+- **`'magma'`** - Similar to inferno but with different hue progression
+
+### Diverging Colormaps
+- **`'coolwarm'`** - Blue to red, good for data with meaningful center
+- **`'seismic'`** - Blue-white-red, good for positive/negative data
+- **`'RdYlBu'`** - Red-yellow-blue, good for temperature-like data
+
+### Traditional Colormaps
+- **`'jet'`** - Default, rainbow colors (not perceptually uniform)
+- **`'hot'`** - Black-red-yellow-white progression
+- **`'cool'`** - Cyan-magenta progression
+
+### Usage Examples:
+```python
+# Scientific visualization with colorbar
+compare_resolution(cmap='viridis', colorbar=True)
+
+# High contrast for defect detection without colorbar
+compare_resolution(cmap='plasma', colorbar=False)
+
+# Traditional rainbow colors with colorbar (default)
+compare_resolution(cmap='jet')  # Default: colorbar=True
+
+# Diverging for warpage analysis with custom range and colorbar
+compare_resolution(vmin=-2000, vmax=10, cmap='coolwarm', colorbar=True)
+```
+
+### Colorbar Behavior:
+
+**📊 Colorbar Placement:**
+- **Comparison Plot (Page 1)**: No colorbar for cleaner layout
+- **Individual Plots (Pages 2-5)**: Colorbars shown when enabled
+- **PDF Export**: Follows the same colorbar settings
+
+**✅ Use Colorbars When:**
+- Presenting data to stakeholders who need to understand exact values
+- Creating scientific publications or reports
+- Analyzing quantitative warpage measurements
+- Comparing different datasets where scale matters
+
+**❌ Disable Colorbars When:**
+- Creating presentation slides for overview purposes
+- Focusing on patterns rather than exact values
+- Space is limited (colorbars take additional room)
+- Creating clean, minimalist visualizations
 
 ## 🔧 Advanced Usage Examples
 
-### Resolution Comparison Analysis
+### Command Line Usage with Analysis Presets
+
+```bash
+# Show help and available analysis presets
+python main_analysis.py --help
+
+# Use resolution comparison analysis and show plots
+python main_analysis.py resolution_comparison --show
+
+# Use resolution comparison with custom visualization settings
+python main_analysis.py resolution_comparison --cmap=plasma --vmin=-1500 --vmax=-800
+
+# Disable colorbar for cleaner output
+python main_analysis.py resolution_comparison --no-colorbar
+```
+
+### Python Module Usage with Analysis Presets
 
 ```python
 from main_analysis import compare_resolution
 import matplotlib.pyplot as plt
 
 # Run the resolution comparison analysis
-compare_resolution()
+fig = compare_resolution("resolution_comparison")
 # This will:
 # 1. Load all resolution data with file size info
 # 2. Calculate global color range for consistent scaling
-# 3. Create comparison visualization
-# 4. Display file information table
-# 5. Show statistical comparison
-# 6. Export PDF with consistent scaling
-# 7. Create visualization (but not display it yet)
+# 3. Apply default visualization settings (auto range, cmap=jet, colorbar=True)
+# 4. Create comparison visualization
+# 5. Display file information table
+# 6. Show statistical comparison
+# 7. Export PDF with analysis results
+# 8. Create visualization (but not display it yet)
+
+# Run with custom visualization settings
+fig = compare_resolution("resolution_comparison", vmin=-1500, vmax=-800, cmap="plasma")
 
 # Display plots when ready
 plt.show()
 ```
+
+### Interactive Usage
+
+```bash
+# Run the interactive script
+python analyze.py
+```
+
+This will:
+1. Show all available presets
+2. Prompt for preset selection
+3. Run the analysis with the selected preset
+4. Display the plots
 
 ### Custom Center Region Extraction
 
@@ -439,6 +677,8 @@ data/
 - **Center Region Focus**: Analyzes most important part of warpage data
 - **High-Resolution Output**: 300 DPI PDF exports
 - **Consistent Scaling**: Same x,y scale for all graphs for proper comparison
+- **Customizable Colormaps**: Support for various colormaps including scientific and traditional options
+- **Colorbar Support**: Optional colorbars show the relationship between colors and data values
 - **Deferred Display**: Graphs are created but not shown automatically - user controls when to display
 - **File Size Reporting**: Displays file sizes in human-readable format
 - **Future-Ready**: Statistics functions available for future same-resolution comparisons
@@ -472,7 +712,35 @@ data/
 
 ## 📝 Version History
 
-### Version 1.5.0 (Current)
+### Version 1.8.0 (Current)
+- **Added**: Analysis preset system for different analysis types
+- **Refactored**: Moved analysis presets to separate `presets.py` file
+- **Simplified**: Main file now uses analysis presets
+- **Enhanced**: Command-line interface for selecting analysis types
+- **New**: Interactive `analyze.py` script for easy analysis selection
+- **Future-Ready**: Structure in place for adding new analysis types
+
+### Version 1.7.1
+- **Fixed**: Custom color range (vmin/vmax) now properly applied to PDF exports
+- **Improved**: Removed large colorbar from comparison plot (first page) for cleaner layout
+- **Enhanced**: Individual plots still show colorbars when enabled
+- **Updated**: PDF export function now correctly uses custom color ranges
+
+### Version 1.7.0
+- **Added**: Colorbar support - users can enable/disable colorbars in visualizations
+- **Enhanced**: `compare_resolution()` function now accepts `colorbar` parameter
+- **Updated**: All visualization functions support colorbar parameter
+- **Improved**: PDF exports now include colorbars when enabled
+- **Flexible**: Colorbars can be toggled on/off for cleaner presentations
+
+### Version 1.6.0
+- **Added**: Colormap support - users can specify different colormaps for visualizations
+- **Enhanced**: `compare_resolution()` function now accepts `cmap` parameter
+- **Updated**: All visualization functions support colormap parameter
+- **Improved**: PDF exports now use specified colormap throughout
+- **Available colormaps**: 'viridis', 'plasma', 'inferno', 'magma', 'coolwarm', 'seismic', 'RdYlBu', 'jet', 'hot', 'cool'
+
+### Version 1.5.0
 - **Simplified**: Removed `main()`, `quick_analysis()`, and `compare_resolutions()` functions
 - **Renamed**: `routine_resolution_comparison()` → `compare_resolution()` 
 - **Streamlined**: Only one main function for resolution comparison analysis
