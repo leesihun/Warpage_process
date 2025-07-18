@@ -60,8 +60,6 @@ def export_to_pdf(folder_data, output_filename='warpage_analysis.pdf',
     
     # Create PDF with A4 page size
     with PdfPages(full_output_path) as pdf:
-        # Set A4 page size for all pages
-        pdf.set_size(A4_WIDTH, A4_HEIGHT)
         
         # Pages 1-N: Individual plots
         print("Creating individual plots...")
