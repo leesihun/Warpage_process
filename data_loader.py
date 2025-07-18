@@ -1,18 +1,25 @@
-# data_loader.py - Data Loading and Processing Functions
+#!/usr/bin/env python3
+"""
+Data loading and processing functions for Warpage Analyzer
+"""
+
 import os
 import numpy as np
+from config import FILE_PATTERNS
+
 
 def load_data_from_file(file_path):
     """
-    Load raw data from a text file.
+    Load raw data from a text file, removing all-zero rows and columns by default.
     
     Args:
         file_path (str): Path to the data file
         
     Returns:
-        numpy.ndarray: Raw data array, or None if error
+        numpy.ndarray: Cleaned data array, or None if error
     """
     try:
+        print(f"Opening file: {file_path}")
         with open(file_path, 'r', encoding='utf-8') as f:
             data = f.read()
         
@@ -20,24 +27,36 @@ def load_data_from_file(file_path):
         data_lines = data.strip().split('\n')
         data_array = np.array([list(map(float, line.split())) for line in data_lines])
         
+        # Remove all-zero rows
+        nonzero_row_mask = ~(np.all(data_array == 0, axis=1))
+        data_array = data_array[nonzero_row_mask, :]
+        # Remove all-zero columns
+        nonzero_col_mask = ~(np.all(data_array == 0, axis=0))
+        data_array = data_array[:, nonzero_col_mask]
+        
         return data_array
     except Exception as e:
         print(f"Error loading {file_path}: {e}")
         return None
 
-def extract_center_region(data_array, row_fraction=0.4, col_fraction=0.5):
+
+def extract_center_region(data_array, row_fraction=1, col_fraction=1):
     """
     Extract center region from data array.
     
     Args:
         data_array (numpy.ndarray): Input data array
-        row_fraction (float): Fraction of rows to keep in center (default: 0.4)
-        col_fraction (float): Fraction of columns to keep in center (default: 0.5)
+        row_fraction (float): Fraction of rows to keep in center
+        col_fraction (float): Fraction of columns to keep in center
         
     Returns:
         numpy.ndarray: Center region data
     """
     n_rows, n_cols = data_array.shape
+    
+    # If fractions are 1, return the full data
+    if row_fraction == 1 and col_fraction == 1:
+        return data_array
     
     # Calculate center region boundaries
     row_margin = (1 - row_fraction) / 2
@@ -53,102 +72,70 @@ def extract_center_region(data_array, row_fraction=0.4, col_fraction=0.5):
     
     return center_data
 
-def find_ori_file(folder_path):
-    """
-    Find the ORI file in a given folder.
-    
-    Args:
-        folder_path (str): Path to the folder
-        
-    Returns:
-        str: Full path to the ORI file, or None if not found
-    """
-    try:
-        files = os.listdir(folder_path)
-        ori_files = [f for f in files if f.endswith('@_ORI.txt')]
-        if ori_files:
-            return os.path.join(folder_path, ori_files[0])
-        else:
-            print(f"No ORI file found in {folder_path}")
-            return None
-    except Exception as e:
-        print(f"Error accessing folder {folder_path}: {e}")
-        return None
 
-def find_all_data_files(folder_path, pattern='@_ORI.txt'):
+def find_data_files(folder_path, use_original_files=True):
     """
-    Find all data files matching a pattern in a given folder.
-    This function is designed for future use when comparing multiple files of same resolution.
+    Find all data files in a given folder (original or corrected).
     
     Args:
         folder_path (str): Path to the folder
-        pattern (str): File pattern to match (default: '@_ORI.txt')
+        use_original_files (bool): If True, look for original files (@_ORI.txt), 
+                                  if False, look for corrected files (.txt but not @_ORI.txt)
         
     Returns:
-        list: List of full paths to matching files
+        list: List of full paths to the data files, or empty list if none found
     """
     try:
         files = os.listdir(folder_path)
-        matching_files = [os.path.join(folder_path, f) for f in files if pattern in f]
-        return matching_files
+        
+        if use_original_files:
+            # Look for original files
+            pattern = FILE_PATTERNS['original']
+            target_files = [f for f in files if f.endswith(pattern)]
+            file_type = "original"
+        else:
+            # Look for corrected files (.txt but not @_ORI.txt)
+            pattern = FILE_PATTERNS['corrected']
+            original_pattern = FILE_PATTERNS['original']
+            target_files = [f for f in files if f.endswith(pattern) and not f.endswith(original_pattern)]
+            file_type = "corrected"
+        
+        if target_files:
+            # Sort files for consistent ordering
+            target_files.sort()
+            return [os.path.join(folder_path, f) for f in target_files]
+        else:
+            print(f"No {file_type} files found in {folder_path}")
+            return []
     except Exception as e:
         print(f"Error accessing folder {folder_path}: {e}")
         return []
 
-def process_resolution_data(base_path, resolution):
-    """
-    Process data for a single resolution.
-    
-    Args:
-        base_path (str): Base path to data folders
-        resolution (str): Resolution folder name
-        
-    Returns:
-        tuple: (center_data, stats, ori_filename) or (None, None, None) if error
-    """
-    from statistics_utils import calculate_statistics
-    
-    folder_path = os.path.join(base_path, resolution)
-    file_path = find_ori_file(folder_path)
-    
-    if file_path is None:
-        return None, None, None
-    
-    # Load raw data
-    raw_data = load_data_from_file(file_path)
-    if raw_data is None:
-        return None, None, None
-    
-    # Extract center region
-    center_data = extract_center_region(raw_data)
-    
-    # Calculate statistics
-    stats = calculate_statistics(center_data)
-    
-    # Get filename for display
-    ori_filename = os.path.basename(file_path)
-    
-    return center_data, stats, ori_filename
 
-def process_multiple_files_same_resolution(base_path, resolution, file_pattern='@_ORI.txt'):
+def process_folder_data(base_path, folder, row_fraction=1, col_fraction=1, use_original_files=True):
     """
-    Process multiple files for the same resolution.
-    This function is designed for future use when comparing multiple datasets of same resolution.
+    Process data for all files in a single folder.
     
     Args:
         base_path (str): Base path to data folders
-        resolution (str): Resolution folder name
-        file_pattern (str): Pattern to match files (default: '@_ORI.txt')
+        folder (str): Folder name
+        row_fraction (float): Fraction of rows to keep in center
+        col_fraction (float): Fraction of columns to keep in center
+        use_original_files (bool): If True, use original files (@_ORI.txt), 
+                                  if False, use corrected files (.txt but not @_ORI.txt)
         
     Returns:
-        dict: Dictionary with filename as key and (center_data, stats, filename) as value
+        list: List of tuples (center_data, stats, data_filename) for each file, or empty list if error
     """
-    from statistics_utils import calculate_statistics
+    from statistics import calculate_statistics
     
-    folder_path = os.path.join(base_path, resolution)
-    file_paths = find_all_data_files(folder_path, file_pattern)
+    folder_path = os.path.join(base_path, folder)
+    file_paths = find_data_files(folder_path, use_original_files)
     
-    results = {}
+    if not file_paths:
+        return []
+    
+    results = []
     
     for file_path in file_paths:
         # Load raw data
@@ -157,38 +144,40 @@ def process_multiple_files_same_resolution(base_path, resolution, file_pattern='
             continue
         
         # Extract center region
-        center_data = extract_center_region(raw_data)
+        center_data = extract_center_region(raw_data, row_fraction, col_fraction)
         
         # Calculate statistics
         stats = calculate_statistics(center_data)
         
         # Get filename for display
-        filename = os.path.basename(file_path)
-        dataset_name = filename.replace('@_ORI.txt', '').replace('@.txt', '')
+        data_filename = os.path.basename(file_path)
         
-        results[dataset_name] = (center_data, stats, filename)
+        results.append((center_data, stats, data_filename))
     
     return results
 
-def get_available_resolutions(base_path='./data/단일보드'):
+
+def get_file_size(file_path):
     """
-    Get list of available resolution folders.
+    Get file size in a human-readable format.
     
     Args:
-        base_path (str): Base path to data folders
+        file_path (str): Path to the file
         
     Returns:
-        list: List of available resolution folder names
+        str: File size in human-readable format
     """
-    try:
-        if not os.path.exists(base_path):
-            print(f"Base path does not exist: {base_path}")
-            return []
-        
-        folders = [f for f in os.listdir(base_path) if os.path.isdir(os.path.join(base_path, f))]
-        # Filter to only numeric folder names (resolutions)
-        resolution_folders = [f for f in folders if f.isdigit()]
-        return sorted(resolution_folders, key=int)
-    except Exception as e:
-        print(f"Error accessing base path {base_path}: {e}")
-        return [] 
+    if not os.path.exists(file_path):
+        return "File not found"
+    
+    size_bytes = os.path.getsize(file_path)
+    
+    # Convert to human-readable format
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    elif size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.2f} KB"
+    elif size_bytes < 1024 * 1024 * 1024:
+        return f"{size_bytes / (1024 * 1024):.2f} MB"
+    else:
+        return f"{size_bytes / (1024 * 1024 * 1024):.2f} GB" 
