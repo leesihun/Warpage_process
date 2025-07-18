@@ -200,8 +200,8 @@ data/
 
 - **Web GUI**: Modern, responsive web interface for easy analysis
 - **Enhanced Status Reporting**: Real-time progress bars and detailed status messages for both analysis and PDF export
-- **Individual Statistical Plots**: Each statistical analysis gets its own page in PDF for better readability
-- **Warpage Distribution Analysis**: Cumulative distribution function (CDF) plot showing probability vs warpage values
+- **Combined Statistical Plots**: Two graphs per page in up-down configuration for efficient space utilization
+- **Warpage Distribution Analysis**: Histogram/Gaussian distribution plot showing warpage values vs frequency
 - **Simplified File Naming**: Clean file identification using just numbers (01, 02, etc.) instead of 'File_' prefix
 - **Detailed File Processing**: Shows file sizes, shapes, artifact counts, and processing parameters
 - **Modular Design**: Well-organized code structure with separate modules for different functionalities
@@ -233,7 +233,26 @@ data/
 
 ## 📝 Version History
 
-### Version 3.6.0 (Current)
+### Version 3.9.0 (Current)
+- **Enhanced**: Warpage distribution plot now shows histogram of (max-min) values
+- **Improved**: X-axis shows (Max - Min) warpage values, Y-axis shows probability density
+- **Updated**: Added mean line and statistics box showing mean, std, min, max values
+- **Enhanced**: Better statistical analysis of warpage range distribution across files
+
+### Version 3.8.0
+- **Fixed**: Web GUI statistical plots now match PDF export layout exactly
+- **Enhanced**: Web GUI shows same combined statistical analysis as PDF (Mean, Range, Min-Max)
+- **Improved**: Consistent visualization between web interface and PDF reports
+- **Updated**: Web GUI statistical plots use simplified file names and same styling as PDF
+
+### Version 3.7.0
+- **New**: Combined statistical plots - two graphs per page in up-down configuration for better space utilization
+- **Enhanced**: Warpage distribution plot now shows histogram/Gaussian distribution instead of CDF
+- **Improved**: Statistical analysis now includes 3 pages: Mean+Range, Min-Max+StdDev, and Distribution
+- **Enhanced**: Better PDF organization with combined plots reducing total page count
+- **Updated**: Distribution plot shows warpage values vs frequency/density for intuitive analysis
+
+### Version 3.6.0
 - **New**: Warpage distribution plot (CDF) - shows probability vs warpage values for comprehensive analysis
 - **Enhanced**: Added cumulative distribution function plot with probability on x-axis and warpage values on y-axis
 - **Improved**: Statistical analysis now includes 5 focused plots: Mean, Range, Min-Max, Standard Deviation, and Distribution

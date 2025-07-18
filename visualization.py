@@ -380,9 +380,9 @@ def create_std_comparison_plot(folder_data, figsize=(10, 6)):
 
 def create_warpage_distribution_plot(folder_data, figsize=(10, 6)):
     """
-    Create a warpage distribution plot showing cumulative distribution function (CDF).
-    X-axis: Probability (0 to 1)
-    Y-axis: Warpage values
+    Create a warpage distribution plot showing histogram of (max-min) values.
+    X-axis: (Max - Min) Warpage Value
+    Y-axis: Probability/Frequency
     
     Args:
         folder_data (dict): Dictionary with file_id as key and (data, stats, filename) as value
@@ -393,38 +393,205 @@ def create_warpage_distribution_plot(folder_data, figsize=(10, 6)):
     """
     fig, ax = plt.subplots(figsize=figsize)
     
+    # Calculate (max-min) values for each file
+    max_min_values = []
+    for file_id, (data, stats, filename) in folder_data.items():
+        max_min_diff = stats['max'] - stats['min']
+        max_min_values.append(max_min_diff)
+    
+    if max_min_values:
+        # Create histogram of (max-min) values
+        ax.hist(max_min_values, bins=min(10, len(max_min_values)), alpha=0.7, 
+               color='purple', edgecolor='black', linewidth=1, density=True)
+        
+        # Add mean line
+        mean_value = np.mean(max_min_values)
+        ax.axvline(mean_value, color='red', linestyle='--', linewidth=2, 
+                  label=f'Mean: {mean_value:.1f}')
+        
+        # Add statistics text
+        std_value = np.std(max_min_values)
+        min_value = np.min(max_min_values)
+        max_value = np.max(max_min_values)
+        
+        stats_text = f'Mean: {mean_value:.1f}\nStd: {std_value:.1f}\nMin: {min_value:.1f}\nMax: {max_value:.1f}'
+        ax.text(0.02, 0.98, stats_text, transform=ax.transAxes, fontsize=10,
+               verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+        
+        ax.legend(fontsize=10)
+    
+    ax.set_xlabel('(Max - Min) Warpage Value', fontsize=12)
+    ax.set_ylabel('Probability Density', fontsize=12)
+    ax.set_title('Warpage Range Distribution', fontsize=14, fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    ax.tick_params(axis='both', which='major', labelsize=10)
+    
+    plt.tight_layout()
+    return fig 
+
+
+def create_mean_range_combined_plot(folder_data, figsize=(10, 12)):
+    """
+    Create a combined plot showing mean and range comparisons in up-down configuration.
+    
+    Args:
+        folder_data (dict): Dictionary with file_id as key and (data, stats, filename) as value
+        figsize (tuple): Figure size
+        
+    Returns:
+        matplotlib.figure.Figure: The created figure
+    """
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=figsize)
+    fig.suptitle('Statistical Comparison - Mean and Range', fontsize=16, fontweight='bold')
+    
     # Simplify file IDs to just numbers
     file_ids = list(folder_data.keys())
     simple_file_ids = [fid.replace('File_', '') for fid in file_ids]
     
-    # Colors for different files
-    colors = ['blue', 'red', 'green', 'orange', 'purple', 'brown', 'pink', 'gray', 'olive', 'cyan']
+    x_pos = np.arange(len(file_ids))
     
-    for i, (file_id, (data, stats, filename)) in enumerate(folder_data.items()):
-        # Remove NaN values for analysis
-        valid_data = data[~np.isnan(data)].flatten()
-        if len(valid_data) > 0:
-            # Sort data for CDF calculation
-            sorted_data = np.sort(valid_data)
-            
-            # Calculate cumulative probability
-            n = len(sorted_data)
-            probability = np.arange(1, n + 1) / n
-            
-            # Plot CDF
-            color = colors[i % len(colors)]
-            ax.plot(probability, sorted_data, label=f'{simple_file_ids[i]}', 
-                   color=color, linewidth=2, alpha=0.8)
+    # Top plot: Mean comparison
+    means = [stats['mean'] for _, (_, stats, _) in folder_data.items()]
+    stds = [stats['std'] for _, (_, stats, _) in folder_data.items()]
     
-    ax.set_xlabel('Probability', fontsize=12)
-    ax.set_ylabel('Warpage Value', fontsize=12)
-    ax.set_title('Warpage Distribution (Cumulative)', fontsize=14, fontweight='bold')
-    ax.legend(fontsize=10, loc='best')
-    ax.grid(True, alpha=0.3)
-    ax.tick_params(axis='both', which='major', labelsize=10)
+    ax1.bar(x_pos, means, yerr=stds, capsize=5, alpha=0.7, color='skyblue')
+    ax1.set_xlabel('Files', fontsize=12)
+    ax1.set_ylabel('Mean Warpage Value', fontsize=12)
+    ax1.set_title('Mean Warpage Values with Standard Deviation', fontsize=14, fontweight='bold')
+    ax1.set_xticks(x_pos)
+    ax1.set_xticklabels(simple_file_ids, rotation=45, ha='right', fontsize=10)
+    ax1.grid(True, alpha=0.3)
+    ax1.tick_params(axis='both', which='major', labelsize=10)
     
-    # Set x-axis limits to probability range
-    ax.set_xlim(0, 1)
+    # Bottom plot: Range comparison
+    ranges = [stats['range'] for _, (_, stats, _) in folder_data.items()]
+    ax2.bar(x_pos, ranges, alpha=0.7, color='orange')
+    ax2.set_xlabel('Files', fontsize=12)
+    ax2.set_ylabel('Warpage Range', fontsize=12)
+    ax2.set_title('Warpage Range Comparison', fontsize=14, fontweight='bold')
+    ax2.set_xticks(x_pos)
+    ax2.set_xticklabels(simple_file_ids, rotation=45, ha='right', fontsize=10)
+    ax2.grid(True, alpha=0.3)
+    ax2.tick_params(axis='both', which='major', labelsize=10)
+    
+    plt.tight_layout()
+    return fig
+
+
+def create_minmax_std_combined_plot(folder_data, figsize=(10, 12)):
+    """
+    Create a combined plot showing min-max and standard deviation comparisons in up-down configuration.
+    
+    Args:
+        folder_data (dict): Dictionary with file_id as key and (data, stats, filename) as value
+        figsize (tuple): Figure size
+        
+    Returns:
+        matplotlib.figure.Figure: The created figure
+    """
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=figsize)
+    fig.suptitle('Statistical Comparison - Min-Max and Standard Deviation', fontsize=16, fontweight='bold')
+    
+    # Simplify file IDs to just numbers
+    file_ids = list(folder_data.keys())
+    simple_file_ids = [fid.replace('File_', '') for fid in file_ids]
+    
+    x_pos = np.arange(len(file_ids))
+    
+    # Top plot: Min-Max comparison
+    mins = [stats['min'] for _, (_, stats, _) in folder_data.items()]
+    maxs = [stats['max'] for _, (_, stats, _) in folder_data.items()]
+    
+    ax1.plot(x_pos, mins, 'o-', label='Min', color='red', alpha=0.7, linewidth=2, markersize=8)
+    ax1.plot(x_pos, maxs, 's-', label='Max', color='blue', alpha=0.7, linewidth=2, markersize=8)
+    ax1.fill_between(x_pos, mins, maxs, alpha=0.2, color='gray')
+    ax1.set_xlabel('Files', fontsize=12)
+    ax1.set_ylabel('Warpage Value', fontsize=12)
+    ax1.set_title('Min-Max Warpage Values', fontsize=14, fontweight='bold')
+    ax1.set_xticks(x_pos)
+    ax1.set_xticklabels(simple_file_ids, rotation=45, ha='right', fontsize=10)
+    ax1.legend(fontsize=10)
+    ax1.grid(True, alpha=0.3)
+    ax1.tick_params(axis='both', which='major', labelsize=10)
+    
+    # Bottom plot: Standard deviation comparison
+    stds = [stats['std'] for _, (_, stats, _) in folder_data.items()]
+    ax2.bar(x_pos, stds, alpha=0.7, color='green')
+    ax2.set_xlabel('Files', fontsize=12)
+    ax2.set_ylabel('Standard Deviation', fontsize=12)
+    ax2.set_title('Standard Deviation Comparison', fontsize=14, fontweight='bold')
+    ax2.set_xticks(x_pos)
+    ax2.set_xticklabels(simple_file_ids, rotation=45, ha='right', fontsize=10)
+    ax2.grid(True, alpha=0.3)
+    ax2.tick_params(axis='both', which='major', labelsize=10)
+    
+    plt.tight_layout()
+    return fig 
+
+
+def create_web_gui_statistical_plots(folder_data, figsize=(12, 16)):
+    """
+    Create statistical plots for web GUI that match the PDF export layout.
+    Shows all statistical analyses in a single figure with 3 sections.
+    
+    Args:
+        folder_data (dict): Dictionary with file_id as key and (data, stats, filename) as value
+        figsize (tuple): Figure size
+        
+    Returns:
+        matplotlib.figure.Figure: The created figure
+    """
+    fig = plt.figure(figsize=figsize)
+    fig.suptitle('Statistical Analysis - Warpage Comparison', fontsize=16, fontweight='bold')
+    
+    # Simplify file IDs to just numbers
+    file_ids = list(folder_data.keys())
+    simple_file_ids = [fid.replace('File_', '') for fid in file_ids]
+    
+    x_pos = np.arange(len(file_ids))
+    
+    # 1. Mean comparison (top)
+    ax1 = plt.subplot(3, 1, 1)
+    means = [stats['mean'] for _, (_, stats, _) in folder_data.items()]
+    stds = [stats['std'] for _, (_, stats, _) in folder_data.items()]
+    
+    ax1.bar(x_pos, means, yerr=stds, capsize=5, alpha=0.7, color='skyblue')
+    ax1.set_xlabel('Files', fontsize=12)
+    ax1.set_ylabel('Mean Warpage Value', fontsize=12)
+    ax1.set_title('Mean Warpage Values with Standard Deviation', fontsize=14, fontweight='bold')
+    ax1.set_xticks(x_pos)
+    ax1.set_xticklabels(simple_file_ids, rotation=45, ha='right', fontsize=10)
+    ax1.grid(True, alpha=0.3)
+    ax1.tick_params(axis='both', which='major', labelsize=10)
+    
+    # 2. Range comparison (middle)
+    ax2 = plt.subplot(3, 1, 2)
+    ranges = [stats['range'] for _, (_, stats, _) in folder_data.items()]
+    ax2.bar(x_pos, ranges, alpha=0.7, color='orange')
+    ax2.set_xlabel('Files', fontsize=12)
+    ax2.set_ylabel('Warpage Range', fontsize=12)
+    ax2.set_title('Warpage Range Comparison', fontsize=14, fontweight='bold')
+    ax2.set_xticks(x_pos)
+    ax2.set_xticklabels(simple_file_ids, rotation=45, ha='right', fontsize=10)
+    ax2.grid(True, alpha=0.3)
+    ax2.tick_params(axis='both', which='major', labelsize=10)
+    
+    # 3. Min-Max comparison (bottom)
+    ax3 = plt.subplot(3, 1, 3)
+    mins = [stats['min'] for _, (_, stats, _) in folder_data.items()]
+    maxs = [stats['max'] for _, (_, stats, _) in folder_data.items()]
+    
+    ax3.plot(x_pos, mins, 'o-', label='Min', color='red', alpha=0.7, linewidth=2, markersize=8)
+    ax3.plot(x_pos, maxs, 's-', label='Max', color='blue', alpha=0.7, linewidth=2, markersize=8)
+    ax3.fill_between(x_pos, mins, maxs, alpha=0.2, color='gray')
+    ax3.set_xlabel('Files', fontsize=12)
+    ax3.set_ylabel('Warpage Value', fontsize=12)
+    ax3.set_title('Min-Max Warpage Values', fontsize=14, fontweight='bold')
+    ax3.set_xticks(x_pos)
+    ax3.set_xticklabels(simple_file_ids, rotation=45, ha='right', fontsize=10)
+    ax3.legend(fontsize=10)
+    ax3.grid(True, alpha=0.3)
+    ax3.tick_params(axis='both', which='major', labelsize=10)
     
     plt.tight_layout()
     return fig 

@@ -25,7 +25,9 @@ from config import DATA_DIR, REPORT_DIR, WEB_PORT, WEB_HOST, WEB_DEBUG
 from data_loader import process_folder_data, find_data_files
 from analyzer import analyze_warpage
 from statistics import calculate_statistics
-from visualization import create_individual_plot, create_statistical_comparison_plots
+from visualization import (create_individual_plot, create_statistical_comparison_plots,
+                          create_mean_range_combined_plot, create_minmax_std_combined_plot,
+                          create_warpage_distribution_plot, create_web_gui_statistical_plots)
 from pdf_exporter import export_to_pdf, ensure_report_directory
 
 app = Flask(__name__)
@@ -227,8 +229,8 @@ def get_stats_plot():
             filename = result['filename']
             folder_data[file_id] = (data, stats, filename)
         
-        # Create statistical plot
-        fig = create_statistical_comparison_plots(folder_data, figsize=(12, 8))
+        # Create statistical plots that match the PDF export
+        fig = create_web_gui_statistical_plots(folder_data, figsize=(12, 16))
         
         # Convert to base64
         img_buffer = BytesIO()

@@ -9,7 +9,8 @@ from config import REPORT_DIR
 from visualization import (create_individual_plot, create_3d_surface_plot, create_statistical_comparison_plots,
                           create_mean_comparison_plot, create_range_comparison_plot, 
                           create_minmax_comparison_plot, create_std_comparison_plot,
-                          create_warpage_distribution_plot)
+                          create_warpage_distribution_plot, create_mean_range_combined_plot,
+                          create_minmax_std_combined_plot)
 from data_loader import get_file_size
 import matplotlib.pyplot as plt
 
@@ -75,41 +76,29 @@ def export_to_pdf(folder_data, output_filename='warpage_analysis.pdf',
             pdf.savefig(individual_fig, dpi=dpi, bbox_inches='tight')
             individual_fig.clear()
         
-        # Statistical comparison pages (one plot per page)
+        # Statistical comparison pages (two plots per page in up-down configuration)
         if include_stats and len(folder_data) > 0:
             print("Creating statistical comparison pages...")
             
-            # 1. Mean comparison plot
-            print("  Creating mean comparison plot...")
-            mean_fig = create_mean_comparison_plot(folder_data, figsize=(A4_WIDTH-1, A4_HEIGHT-1))
-            pdf.savefig(mean_fig, dpi=dpi, bbox_inches='tight')
-            mean_fig.clear()
+            # 1. Mean and Range combined plot
+            print("  Creating mean and range combined plot...")
+            mean_range_fig = create_mean_range_combined_plot(folder_data, figsize=(A4_WIDTH-1, A4_HEIGHT-1))
+            pdf.savefig(mean_range_fig, dpi=dpi, bbox_inches='tight')
+            mean_range_fig.clear()
             
-            # 2. Range comparison plot
-            print("  Creating range comparison plot...")
-            range_fig = create_range_comparison_plot(folder_data, figsize=(A4_WIDTH-1, A4_HEIGHT-1))
-            pdf.savefig(range_fig, dpi=dpi, bbox_inches='tight')
-            range_fig.clear()
+            # 2. Min-Max and Standard Deviation combined plot
+            print("  Creating min-max and standard deviation combined plot...")
+            minmax_std_fig = create_minmax_std_combined_plot(folder_data, figsize=(A4_WIDTH-1, A4_HEIGHT-1))
+            pdf.savefig(minmax_std_fig, dpi=dpi, bbox_inches='tight')
+            minmax_std_fig.clear()
             
-            # 3. Min-Max comparison plot
-            print("  Creating min-max comparison plot...")
-            minmax_fig = create_minmax_comparison_plot(folder_data, figsize=(A4_WIDTH-1, A4_HEIGHT-1))
-            pdf.savefig(minmax_fig, dpi=dpi, bbox_inches='tight')
-            minmax_fig.clear()
-            
-            # 4. Standard deviation comparison plot
-            print("  Creating standard deviation comparison plot...")
-            std_fig = create_std_comparison_plot(folder_data, figsize=(A4_WIDTH-1, A4_HEIGHT-1))
-            pdf.savefig(std_fig, dpi=dpi, bbox_inches='tight')
-            std_fig.clear()
-            
-            # 5. Warpage distribution plot (CDF)
+            # 3. Warpage distribution plot (Histogram)
             print("  Creating warpage distribution plot...")
             dist_fig = create_warpage_distribution_plot(folder_data, figsize=(A4_WIDTH-1, A4_HEIGHT-1))
             pdf.savefig(dist_fig, dpi=dpi, bbox_inches='tight')
             dist_fig.clear()
             
-            print("  ✓ Statistical comparison pages created (5 individual plots)")
+            print("  ✓ Statistical comparison pages created (3 pages with combined plots)")
         
         # Final page: 3D surface plots (if requested)
         if include_3d and len(folder_data) > 0:
