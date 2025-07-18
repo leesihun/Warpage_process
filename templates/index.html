@@ -127,6 +127,9 @@
                                      role="progressbar" style="width: 0%" id="analysisProgress">0%</div>
                             </div>
                             <small class="text-muted" id="progressText">Initializing...</small>
+                            <div class="mt-2" id="statusMessages" style="max-height: 200px; overflow-y: auto; text-align: left; font-size: 0.85em;">
+                                <!-- Status messages will appear here -->
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -140,6 +143,24 @@
                         <button class="btn btn-outline-primary w-100" onclick="exportPDF()">
                             <i class="fas fa-file-pdf"></i> Export PDF Report
                         </button>
+                        
+                        <!-- PDF Export Status -->
+                        <div class="mt-3" id="pdfExportStatus" style="display: none;">
+                            <div class="text-center">
+                                <div class="spinner-border spinner-border-sm text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <small class="text-muted ms-2">Generating PDF...</small>
+                            </div>
+                            <div class="progress mt-2" style="height: 15px;">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                     role="progressbar" style="width: 0%" id="pdfProgress">0%</div>
+                            </div>
+                            <small class="text-muted" id="pdfProgressText">Preparing files...</small>
+                            <div class="mt-2" id="pdfStatusMessages" style="max-height: 150px; overflow-y: auto; text-align: left; font-size: 0.8em;">
+                                <!-- PDF status messages will appear here -->
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -267,6 +288,7 @@
             document.getElementById('analysisProgress').style.width = '0%';
             document.getElementById('analysisProgress').textContent = '0%';
             document.getElementById('progressText').textContent = 'Starting analysis...';
+            document.getElementById('statusMessages').innerHTML = '';
 
             try {
                 const response = await fetch('/api/analyze', {
@@ -292,6 +314,14 @@
                     document.getElementById('analysisProgress').style.width = '100%';
                     document.getElementById('analysisProgress').textContent = '100%';
                     document.getElementById('progressText').textContent = 'Analysis completed!';
+                    
+                    // Display status messages if available
+                    if (data.status_messages && data.status_messages.length > 0) {
+                        const statusContainer = document.getElementById('statusMessages');
+                        statusContainer.innerHTML = data.status_messages.map(msg => 
+                            `<div class="text-muted mb-1">${msg}</div>`
+                        ).join('');
+                    }
                     
                     // Update summary
                     document.getElementById('summaryFolder').textContent = data.summary.folder;
@@ -392,9 +422,45 @@
 
         // Export PDF
         async function exportPDF() {
+            // Show PDF export status
+            document.getElementById('pdfExportStatus').style.display = 'block';
+            document.getElementById('pdfProgress').style.width = '0%';
+            document.getElementById('pdfProgress').textContent = '0%';
+            document.getElementById('pdfProgressText').textContent = 'Preparing files...';
+            document.getElementById('pdfStatusMessages').innerHTML = '';
+            
             try {
+                // Simulate progress updates
+                const progressInterval = setInterval(() => {
+                    const progressBar = document.getElementById('pdfProgress');
+                    const currentWidth = parseInt(progressBar.style.width) || 0;
+                    if (currentWidth < 90) {
+                        const newWidth = Math.min(currentWidth + 10, 90);
+                        progressBar.style.width = newWidth + '%';
+                        progressBar.textContent = newWidth + '%';
+                        
+                        if (newWidth === 20) {
+                            document.getElementById('pdfProgressText').textContent = 'Processing files...';
+                        } else if (newWidth === 40) {
+                            document.getElementById('pdfProgressText').textContent = 'Generating plots...';
+                        } else if (newWidth === 60) {
+                            document.getElementById('pdfProgressText').textContent = 'Creating PDF...';
+                        } else if (newWidth === 80) {
+                            document.getElementById('pdfProgressText').textContent = 'Finalizing...';
+                        }
+                    }
+                }, 500);
+                
                 const response = await fetch('/api/export_pdf');
+                
+                clearInterval(progressInterval);
+                
                 if (response.ok) {
+                    // Update progress to 100%
+                    document.getElementById('pdfProgress').style.width = '100%';
+                    document.getElementById('pdfProgress').textContent = '100%';
+                    document.getElementById('pdfProgressText').textContent = 'PDF generated successfully!';
+                    
                     const blob = await response.blob();
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
@@ -404,13 +470,27 @@
                     a.click();
                     window.URL.revokeObjectURL(url);
                     document.body.removeChild(a);
+                    
+                    // Add success message to status
+                    const statusContainer = document.getElementById('pdfStatusMessages');
+                    statusContainer.innerHTML += '<div class="text-success mb-1">✓ PDF exported successfully!</div>';
+                    
                     showAlert('PDF exported successfully!', 'success');
+                    
+                    // Hide status after 3 seconds
+                    setTimeout(() => {
+                        document.getElementById('pdfExportStatus').style.display = 'none';
+                    }, 3000);
                 } else {
                     const data = await response.json();
+                    document.getElementById('pdfProgressText').textContent = 'PDF export failed';
+                    document.getElementById('pdfStatusMessages').innerHTML += `<div class="text-danger mb-1">✗ ${data.error || 'PDF export failed'}</div>`;
                     showAlert(data.error || 'PDF export failed', 'danger');
                 }
             } catch (error) {
                 console.error('PDF export error:', error);
+                document.getElementById('pdfProgressText').textContent = 'PDF export failed';
+                document.getElementById('pdfStatusMessages').innerHTML += `<div class="text-danger mb-1">✗ PDF export failed: ${error.message}</div>`;
                 showAlert('PDF export failed: ' + error.message, 'danger');
             }
         }

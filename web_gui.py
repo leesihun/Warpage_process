@@ -80,13 +80,20 @@ def analyze():
         # Process folder data and all subdirectories
         results = []
         total_files_processed = 0
+        status_messages = []
         
         # Process the main folder
-        print(f"Processing main folder: {folder}")
+        status_msg = f"Processing main folder: {folder}"
+        print(status_msg)
+        status_messages.append(status_msg)
+        
         main_results = process_folder_data(DATA_DIR, folder, row_fraction, col_fraction, use_original)
         results.extend(main_results)
         total_files_processed += len(main_results)
-        print(f"✓ Main folder processed: {len(main_results)} files")
+        
+        status_msg = f"✓ Main folder processed: {len(main_results)} files"
+        print(status_msg)
+        status_messages.append(status_msg)
         
         # Process all subdirectories
         subdirs_found = []
@@ -94,23 +101,38 @@ def analyze():
             for subdir in dirs:
                 subdirs_found.append(subdir)
         
-        print(f"Found {len(subdirs_found)} subdirectories to process")
+        status_msg = f"Found {len(subdirs_found)} subdirectories to process"
+        print(status_msg)
+        status_messages.append(status_msg)
         
         for i, subdir in enumerate(subdirs_found):
             subdir_path = os.path.join(folder_path, subdir)
             rel_path = os.path.relpath(subdir_path, DATA_DIR)
-            print(f"Processing subdirectory {i+1}/{len(subdirs_found)}: {subdir}")
+            
+            status_msg = f"Processing subdirectory {i+1}/{len(subdirs_found)}: {subdir}"
+            print(status_msg)
+            status_messages.append(status_msg)
+            
             sub_results = process_folder_data(DATA_DIR, rel_path, row_fraction, col_fraction, use_original)
             results.extend(sub_results)
             total_files_processed += len(sub_results)
-            print(f"✓ Subdirectory {subdir} processed: {len(sub_results)} files")
+            
+            status_msg = f"✓ Subdirectory {subdir} processed: {len(sub_results)} files"
+            print(status_msg)
+            status_messages.append(status_msg)
         
-        print(f"Total files processed: {total_files_processed}")
+        status_msg = f"Total files processed: {total_files_processed}"
+        print(status_msg)
+        status_messages.append(status_msg)
         
         if not results:
             return jsonify({'error': f'No data files found in {folder}'})
         
         # Create analysis results
+        status_msg = "Creating analysis results..."
+        print(status_msg)
+        status_messages.append(status_msg)
+        
         analysis_results = {}
         for i, (data, stats, filename) in enumerate(results):
             file_id = f"File_{i+1:02d}"
@@ -120,6 +142,10 @@ def analyze():
                 'filename': filename,
                 'shape': data.shape
             }
+            
+            status_msg = f"  Prepared {file_id}: {filename} ({data.shape})"
+            print(status_msg)
+            status_messages.append(status_msg)
         
         current_analysis = {
             'folder': folder,
@@ -141,7 +167,8 @@ def analyze():
         return jsonify({
             'success': True,
             'summary': summary,
-            'analysis_id': id(current_analysis)
+            'analysis_id': id(current_analysis),
+            'status_messages': status_messages
         })
         
     except Exception as e:
@@ -227,38 +254,71 @@ def export_pdf():
         return jsonify({'error': 'No analysis data available'})
     
     try:
-        print(f"Starting PDF export for folder: {current_analysis['folder']}")
-        print(f"Number of files to process: {len(current_analysis['results'])}")
+        status_messages = []
+        
+        status_msg = f"Starting PDF export for folder: {current_analysis['folder']}"
+        print(status_msg)
+        status_messages.append(status_msg)
+        
+        status_msg = f"Number of files to process: {len(current_analysis['results'])}"
+        print(status_msg)
+        status_messages.append(status_msg)
         
         # Prepare data for PDF export
         folder_data = {}
-        print(f"Preparing {len(current_analysis['results'])} files for PDF export...")
+        status_msg = f"Preparing {len(current_analysis['results'])} files for PDF export..."
+        print(status_msg)
+        status_messages.append(status_msg)
+        
         for i, (file_id, result) in enumerate(current_analysis['results'].items()):
             data = np.array(result['data'])
             stats = result['stats']
             filename = result['filename']
             folder_data[file_id] = (data, stats, filename)
-            print(f"  Prepared {file_id} ({i+1}/{len(current_analysis['results'])}): {data.shape}, {filename}")
+            
+            status_msg = f"  Prepared {file_id} ({i+1}/{len(current_analysis['results'])}): {data.shape}, {filename}"
+            print(status_msg)
+            status_messages.append(status_msg)
         
         # Export PDF
+        status_msg = "Generating PDF report..."
+        print(status_msg)
+        status_messages.append(status_msg)
+        
         pdf_path = export_to_pdf(folder_data, 
                                 output_filename=f'warpage_analysis_{current_analysis["folder"].replace("/", "_")}.pdf',
                                 include_stats=True, include_3d=False)  # Disable 3D plots for now
         
-        print(f"PDF export returned path: {pdf_path}")
+        status_msg = f"PDF export returned path: {pdf_path}"
+        print(status_msg)
+        status_messages.append(status_msg)
         
         if pdf_path and os.path.exists(pdf_path):
-            print(f"PDF file exists at: {pdf_path}")
-            print(f"PDF file size: {os.path.getsize(pdf_path)} bytes")
+            file_size = os.path.getsize(pdf_path)
+            status_msg = f"PDF file exists at: {pdf_path}"
+            print(status_msg)
+            status_messages.append(status_msg)
+            
+            status_msg = f"PDF file size: {file_size} bytes"
+            print(status_msg)
+            status_messages.append(status_msg)
+            
+            status_msg = "PDF export completed successfully!"
+            print(status_msg)
+            status_messages.append(status_msg)
+            
             return send_file(pdf_path, as_attachment=True, 
                            download_name=os.path.basename(pdf_path))
         else:
-            print(f"PDF file does not exist at: {pdf_path}")
+            status_msg = f"PDF file does not exist at: {pdf_path}"
+            print(status_msg)
+            status_messages.append(status_msg)
             return jsonify({'error': 'PDF generation failed - file not created'})
         
     except Exception as e:
         import traceback
-        print(f"PDF export error: {e}")
+        error_msg = f"PDF export error: {e}"
+        print(error_msg)
         print(f"Full traceback: {traceback.format_exc()}")
         return jsonify({'error': f'PDF export failed: {str(e)}'})
 

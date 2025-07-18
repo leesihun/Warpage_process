@@ -23,20 +23,32 @@ def load_data_from_file(file_path):
         with open(file_path, 'r', encoding='utf-8') as f:
             data = f.read()
         
+        print(f"  File size: {len(data)} characters")
+        
         # Convert to numpy array
         data_lines = data.strip().split('\n')
+        print(f"  Number of lines: {len(data_lines)}")
+        
         data_array = np.array([list(map(float, line.split())) for line in data_lines])
+        print(f"  Original array shape: {data_array.shape}")
         
         # Remove all-zero rows
         nonzero_row_mask = ~(np.all(data_array == 0, axis=1))
         data_array = data_array[nonzero_row_mask, :]
+        print(f"  After removing zero rows: {data_array.shape}")
+        
         # Remove all-zero columns
         nonzero_col_mask = ~(np.all(data_array == 0, axis=0))
         data_array = data_array[:, nonzero_col_mask]
+        print(f"  After removing zero columns: {data_array.shape}")
         
         # Nullify -4000 values as artifacts
+        artifact_count = np.sum(data_array == -4000)
         data_array = np.where(data_array == -4000, np.nan, data_array)
+        if artifact_count > 0:
+            print(f"  Nullified {artifact_count} -4000 artifacts")
         
+        print(f"  Final array shape: {data_array.shape}")
         return data_array
     except Exception as e:
         print(f"Error loading {file_path}: {e}")
@@ -140,30 +152,46 @@ def process_folder_data(base_path, folder, row_fraction=1, col_fraction=1, use_o
         return []
     
     print(f"  Found {len(file_paths)} files to process")
+    print(f"  Processing parameters: row_fraction={row_fraction}, col_fraction={col_fraction}")
+    print(f"  File type: {'original' if use_original_files else 'corrected'}")
+    
     results = []
+    successful_files = 0
+    failed_files = 0
     
     for i, file_path in enumerate(file_paths):
-        print(f"    Processing file {i+1}/{len(file_paths)}: {os.path.basename(file_path)}")
+        filename = os.path.basename(file_path)
+        print(f"    Processing file {i+1}/{len(file_paths)}: {filename}")
         
         # Load raw data
         raw_data = load_data_from_file(file_path)
         if raw_data is None:
-            print(f"    ⚠ Skipped {os.path.basename(file_path)} (load failed)")
+            print(f"    ⚠ Skipped {filename} (load failed)")
+            failed_files += 1
             continue
         
         # Extract center region
-        center_data = extract_center_region(raw_data, row_fraction, col_fraction)
+        if row_fraction != 1 or col_fraction != 1:
+            print(f"    Extracting center region: {row_fraction}x{col_fraction}")
+            center_data = extract_center_region(raw_data, row_fraction, col_fraction)
+            print(f"    Center region shape: {center_data.shape}")
+        else:
+            center_data = raw_data
+            print(f"    Using full data: {center_data.shape}")
         
         # Calculate statistics
+        print(f"    Calculating statistics...")
         stats = calculate_statistics(center_data)
+        print(f"    Statistics calculated: min={stats['min']:.6f}, max={stats['max']:.6f}, mean={stats['mean']:.6f}")
         
         # Get filename for display
-        data_filename = os.path.basename(file_path)
+        data_filename = filename
         
         results.append((center_data, stats, data_filename))
-        print(f"    ✓ Processed {os.path.basename(file_path)}: {center_data.shape}")
+        successful_files += 1
+        print(f"    ✓ Processed {filename}: {center_data.shape}")
     
-    print(f"  ✓ Completed {folder}: {len(results)} files processed")
+    print(f"  ✓ Completed {folder}: {successful_files} successful, {failed_files} failed")
     return results
 
 

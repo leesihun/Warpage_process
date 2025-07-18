@@ -199,6 +199,11 @@ data/
 ## 🎯 Key Features
 
 - **Web GUI**: Modern, responsive web interface for easy analysis
+- **Enhanced Status Reporting**: Real-time progress bars and detailed status messages for both analysis and PDF export
+- **Individual Statistical Plots**: Each statistical analysis gets its own page in PDF for better readability
+- **Warpage Distribution Analysis**: Cumulative distribution function (CDF) plot showing probability vs warpage values
+- **Simplified File Naming**: Clean file identification using just numbers (01, 02, etc.) instead of 'File_' prefix
+- **Detailed File Processing**: Shows file sizes, shapes, artifact counts, and processing parameters
 - **Modular Design**: Well-organized code structure with separate modules for different functionalities
 - **Multi-File Processing**: Processes ALL files matching the pattern in each folder automatically
 - **Configurable Parameters**: Customize visualization and analysis settings
@@ -228,7 +233,29 @@ data/
 
 ## 📝 Version History
 
-### Version 3.3.0 (Current)
+### Version 3.6.0 (Current)
+- **New**: Warpage distribution plot (CDF) - shows probability vs warpage values for comprehensive analysis
+- **Enhanced**: Added cumulative distribution function plot with probability on x-axis and warpage values on y-axis
+- **Improved**: Statistical analysis now includes 5 focused plots: Mean, Range, Min-Max, Standard Deviation, and Distribution
+- **Enhanced**: Better color coding for multiple files in distribution plots
+- **Updated**: PDF export now includes warpage distribution analysis page
+
+### Version 3.5.0
+- **New**: Individual statistical plots - each statistical analysis now gets its own page in PDF
+- **Enhanced**: Simplified file naming - removed 'File_' prefix, now shows just numbers (01, 02, etc.)
+- **Removed**: Frequency-warpage distribution plot and data size comparison plot from statistical analysis
+- **Improved**: Cleaner statistical analysis with 4 focused plots: Mean, Range, Min-Max, and Standard Deviation
+- **Enhanced**: Better PDF organization with one statistical plot per page for improved readability
+
+### Version 3.4.0
+- **New**: Enhanced status reporting with detailed progress information
+- **Enhanced**: Real-time status bars for both analysis and PDF export processes
+- **New**: Detailed file processing information including file sizes, shapes, and artifact counts
+- **Improved**: Better progress tracking with step-by-step status messages
+- **Enhanced**: Status messages show file opening, processing parameters, and completion details
+- **New**: PDF export status bar with progress simulation and detailed completion information
+
+### Version 3.3.0
 - **New**: Web-based GUI with modern, responsive interface
 - **Enhanced**: A4 page size for PDF exports with proper plot sizing
 - **New**: Automatic removal of all-zero rows and columns (dummy data) by default
