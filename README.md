@@ -40,7 +40,7 @@ pip install -r requirements.txt
 pip install -r requirements_web.txt
 ```
 
-**Note**: The web GUI runs on port 9410072 by default. You can change this in `config.py` by modifying the `WEB_PORT` variable.
+**Note**: The web GUI runs on port 8080 by default. You can change this in `config.py` by modifying the `WEB_PORT` variable.
 
 ## 🚀 Quick Start
 
@@ -52,7 +52,7 @@ Start the web interface for an easy-to-use graphical interface:
 python web_gui.py
 ```
 
-Then open your browser and go to: http://localhost:9410072
+The browser will open automatically to: http://localhost:8080
 
 **Features:**
 - Modern, responsive web interface
@@ -213,6 +213,7 @@ data/
 - **Command Line Interface**: Easy automation and scripting support
 - **File Type Selection**: Choose between original (@_ORI.txt) or corrected (.txt) files
 - **Zero Data Removal**: Automatically removes all-zero rows and columns (dummy data) by default
+- **Artifact Filtering**: Automatically nullifies -4000 values as artifacts
 - **Maintainable Code**: Clean separation of concerns for easy maintenance and extension
 
 ## 🚨 Troubleshooting

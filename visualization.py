@@ -82,7 +82,9 @@ def create_individual_plot(file_id, data, stats, filename, figsize=(8, 6), vmin=
     """
     fig, ax = plt.subplots(figsize=figsize)
     
-    im = ax.imshow(data, cmap=cmap, vmin=vmin, vmax=vmax)
+    # Handle NaN values in visualization
+    data_for_plot = np.ma.masked_invalid(data)
+    im = ax.imshow(data_for_plot, cmap=cmap, vmin=vmin, vmax=vmax)
     ax.set_title(f'{file_id} - {filename}', fontweight='bold', fontsize=12)
     ax.set_aspect('equal')
     
@@ -94,15 +96,16 @@ def create_individual_plot(file_id, data, stats, filename, figsize=(8, 6), vmin=
     ax.set_xticks([])
     ax.set_yticks([])
     
-    # Add statistics text with smaller font for A4
-    stats_text = f"Shape: {stats['shape']}\nMin: {stats['min']:.6f}\nMax: {stats['max']:.6f}\nMean: {stats['mean']:.6f}\nStd: {stats['std']:.6f}"
-    ax.text(0.02, 0.98, stats_text, transform=ax.transAxes, 
-            verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.9), fontsize=9)
-    
     # Add colorbar if requested
     if colorbar:
-        cbar = fig.colorbar(im, ax=ax, shrink=0.8)
+        cbar = fig.colorbar(im, ax=ax, shrink=0.5)  # Make colorbar shorter
         cbar.set_label('Warpage Value', fontsize=10)
+        
+        # Add statistics text above the colorbar
+        stats_text = f"Shape: {stats['shape']}\nMin: {stats['min']:.6f}\nMax: {stats['max']:.6f}\nMean: {stats['mean']:.6f}\nStd: {stats['std']:.6f}"
+        cbar.ax.text(0.5, 1.1, stats_text, transform=cbar.ax.transAxes, 
+                    verticalalignment='bottom', horizontalalignment='center',
+                    bbox=dict(boxstyle='round', facecolor='white', alpha=0.9), fontsize=9)
     
     plt.tight_layout(pad=0.5)
     return fig
@@ -174,8 +177,11 @@ def create_statistical_comparison_plots(folder_data, figsize=(15, 10)):
     all_data = []
     file_labels = []
     for file_id, (data, stats, filename) in folder_data.items():
-        all_data.append(data.flatten())
-        file_labels.append(file_id)
+        # Remove NaN values for histogram
+        valid_data = data[~np.isnan(data)].flatten()
+        if len(valid_data) > 0:
+            all_data.append(valid_data)
+            file_labels.append(file_id)
     
     # Create histogram
     ax1.hist(all_data, bins=50, alpha=0.7, label=file_labels)

@@ -65,7 +65,9 @@ def export_to_pdf(folder_data, output_filename='warpage_analysis.pdf',
         
         # Pages 1-N: Individual plots
         print("Creating individual plots...")
-        for file_id, (data, stats, filename) in folder_data.items():
+        total_files = len(folder_data)
+        for i, (file_id, (data, stats, filename)) in enumerate(folder_data.items()):
+            print(f"  Creating plot {i+1}/{total_files}: {file_id}")
             # Create figure sized to fit A4 page with margins
             individual_fig = create_individual_plot(file_id, data, stats, filename, 
                                                   figsize=(A4_WIDTH-1, A4_HEIGHT-1), vmin=vmin, vmax=vmax, cmap=cmap, colorbar=colorbar)
@@ -78,6 +80,7 @@ def export_to_pdf(folder_data, output_filename='warpage_analysis.pdf',
             stats_fig = create_statistical_comparison_plots(folder_data, figsize=(A4_WIDTH-1, A4_HEIGHT-1))
             pdf.savefig(stats_fig, dpi=dpi, bbox_inches='tight')
             stats_fig.clear()
+            print("  ✓ Statistical comparison pages created")
         
         # Final page: 3D surface plots (if requested)
         if include_3d and len(folder_data) > 0:

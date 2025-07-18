@@ -26,7 +26,7 @@ DATA_DIR = './data/'
 REPORT_DIR = 'report'
 
 # Web GUI settings
-WEB_PORT = 9410072
+WEB_PORT = 8080  # Changed to a more standard port
 WEB_HOST = '0.0.0.0'
 WEB_DEBUG = True
 

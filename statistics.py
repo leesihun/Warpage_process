@@ -16,13 +16,26 @@ def calculate_statistics(data_array):
     Returns:
         dict: Dictionary containing statistical measures
     """
+    # Handle NaN values by using nan-safe functions
+    valid_data = data_array[~np.isnan(data_array)]
+    
+    if len(valid_data) == 0:
+        return {
+            'min': np.nan,
+            'max': np.nan,
+            'mean': np.nan,
+            'std': np.nan,
+            'shape': data_array.shape,
+            'range': np.nan
+        }
+    
     return {
-        'min': np.min(data_array),
-        'max': np.max(data_array),
-        'mean': np.mean(data_array),
-        'std': np.std(data_array),
+        'min': np.nanmin(data_array),
+        'max': np.nanmax(data_array),
+        'mean': np.nanmean(data_array),
+        'std': np.nanstd(data_array),
         'shape': data_array.shape,
-        'range': np.max(data_array) - np.min(data_array)
+        'range': np.nanmax(data_array) - np.nanmin(data_array)
     }
 
 
@@ -41,8 +54,11 @@ def find_optimal_color_range(folder_data):
     
     for data in folder_data.values():
         if data is not None:
-            all_mins.append(np.min(data))
-            all_maxs.append(np.max(data))
+            # Use nan-safe functions
+            valid_data = data[~np.isnan(data)]
+            if len(valid_data) > 0:
+                all_mins.append(np.nanmin(data))
+                all_maxs.append(np.nanmax(data))
     
     if all_mins and all_maxs:
         return min(all_mins), max(all_maxs)

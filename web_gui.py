@@ -16,11 +16,14 @@ matplotlib.use('Agg')  # Use non-interactive backend
 import matplotlib.pyplot as plt
 import numpy as np
 from io import BytesIO
+import webbrowser
+import threading
+import time
 
 # Import our analysis modules
 from config import DATA_DIR, REPORT_DIR, WEB_PORT, WEB_HOST, WEB_DEBUG
 from data_loader import process_folder_data, find_data_files
-from analyzer import analyze_data
+from analyzer import analyze_warpage
 from statistics import calculate_statistics
 from visualization import create_individual_plot, create_statistical_comparison_plots
 from pdf_exporter import export_to_pdf, ensure_report_directory
@@ -44,6 +47,7 @@ def get_folders():
         if not os.path.exists(DATA_DIR):
             return jsonify({'folders': [], 'error': 'Data directory not found'})
         
+        # Only show top-level folders
         folders = [d for d in os.listdir(DATA_DIR) 
                   if os.path.isdir(os.path.join(DATA_DIR, d))]
         folders.sort()
@@ -71,8 +75,37 @@ def analyze():
         if not os.path.exists(folder_path):
             return jsonify({'error': f'Folder {folder} not found'})
         
-        # Process folder data
-        results = process_folder_data(DATA_DIR, folder, row_fraction, col_fraction, use_original)
+        print(f"Starting analysis of folder: {folder}")
+        
+        # Process folder data and all subdirectories
+        results = []
+        total_files_processed = 0
+        
+        # Process the main folder
+        print(f"Processing main folder: {folder}")
+        main_results = process_folder_data(DATA_DIR, folder, row_fraction, col_fraction, use_original)
+        results.extend(main_results)
+        total_files_processed += len(main_results)
+        print(f"✓ Main folder processed: {len(main_results)} files")
+        
+        # Process all subdirectories
+        subdirs_found = []
+        for root, dirs, files in os.walk(folder_path):
+            for subdir in dirs:
+                subdirs_found.append(subdir)
+        
+        print(f"Found {len(subdirs_found)} subdirectories to process")
+        
+        for i, subdir in enumerate(subdirs_found):
+            subdir_path = os.path.join(folder_path, subdir)
+            rel_path = os.path.relpath(subdir_path, DATA_DIR)
+            print(f"Processing subdirectory {i+1}/{len(subdirs_found)}: {subdir}")
+            sub_results = process_folder_data(DATA_DIR, rel_path, row_fraction, col_fraction, use_original)
+            results.extend(sub_results)
+            total_files_processed += len(sub_results)
+            print(f"✓ Subdirectory {subdir} processed: {len(sub_results)} files")
+        
+        print(f"Total files processed: {total_files_processed}")
         
         if not results:
             return jsonify({'error': f'No data files found in {folder}'})
@@ -194,68 +227,73 @@ def export_pdf():
         return jsonify({'error': 'No analysis data available'})
     
     try:
+        print(f"Starting PDF export for folder: {current_analysis['folder']}")
+        print(f"Number of files to process: {len(current_analysis['results'])}")
+        
         # Prepare data for PDF export
         folder_data = {}
-        for file_id, result in current_analysis['results'].items():
+        print(f"Preparing {len(current_analysis['results'])} files for PDF export...")
+        for i, (file_id, result) in enumerate(current_analysis['results'].items()):
             data = np.array(result['data'])
             stats = result['stats']
             filename = result['filename']
             folder_data[file_id] = (data, stats, filename)
+            print(f"  Prepared {file_id} ({i+1}/{len(current_analysis['results'])}): {data.shape}, {filename}")
         
         # Export PDF
         pdf_path = export_to_pdf(folder_data, 
-                                output_filename=f'warpage_analysis_{current_analysis["folder"]}.pdf',
-                                include_stats=True, include_3d=True)
+                                output_filename=f'warpage_analysis_{current_analysis["folder"].replace("/", "_")}.pdf',
+                                include_stats=True, include_3d=False)  # Disable 3D plots for now
+        
+        print(f"PDF export returned path: {pdf_path}")
         
         if pdf_path and os.path.exists(pdf_path):
+            print(f"PDF file exists at: {pdf_path}")
+            print(f"PDF file size: {os.path.getsize(pdf_path)} bytes")
             return send_file(pdf_path, as_attachment=True, 
                            download_name=os.path.basename(pdf_path))
         else:
-            return jsonify({'error': 'PDF generation failed'})
+            print(f"PDF file does not exist at: {pdf_path}")
+            return jsonify({'error': 'PDF generation failed - file not created'})
         
     except Exception as e:
+        import traceback
+        print(f"PDF export error: {e}")
+        print(f"Full traceback: {traceback.format_exc()}")
         return jsonify({'error': f'PDF export failed: {str(e)}'})
 
-@app.route('/api/download_data')
-def download_data():
-    """API endpoint to download analysis data as JSON"""
-    global current_analysis
-    
-    if not current_analysis:
-        return jsonify({'error': 'No analysis data available'})
-    
+
+
+def open_browser():
+    """Open the web browser after a short delay to ensure server is ready"""
+    time.sleep(2.0)  # Wait longer for server to start
+    url = f"http://localhost:{WEB_PORT}"
     try:
-        # Create JSON data (without the large data arrays)
-        export_data = {
-            'folder': current_analysis['folder'],
-            'use_original': current_analysis['use_original'],
-            'row_fraction': current_analysis['row_fraction'],
-            'col_fraction': current_analysis['col_fraction'],
-            'results': {}
-        }
-        
-        for file_id, result in current_analysis['results'].items():
-            export_data['results'][file_id] = {
-                'stats': result['stats'],
-                'filename': result['filename'],
-                'shape': result['shape']
-            }
-        
-        # Create temporary file
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-            json.dump(export_data, f, indent=2)
-            temp_path = f.name
-        
-        return send_file(temp_path, as_attachment=True, 
-                       download_name=f'warpage_analysis_{current_analysis["folder"]}.json')
-        
+        webbrowser.open(url)
+        print(f"✓ Browser opened successfully to {url}")
     except Exception as e:
-        return jsonify({'error': f'Data export failed: {str(e)}'})
+        print(f"⚠ Could not open browser automatically: {e}")
+        print(f"Please manually open: {url}")
 
 if __name__ == '__main__':
     # Create templates directory if it doesn't exist
     os.makedirs('templates', exist_ok=True)
     
     print("Starting Warpage Analysis Web GUI...")
-    print(f"Open your browser and go to: http://localhost:{WEB_PORT}")
-    app.run(debug=WEB_DEBUG, host=WEB_HOST, port=WEB_PORT) 
+    print(f"Server will start on: http://localhost:{WEB_PORT}")
+    
+    # Start browser in a separate thread
+    browser_thread = threading.Thread(target=open_browser)
+    browser_thread.daemon = True
+    browser_thread.start()
+    
+    try:
+        app.run(debug=WEB_DEBUG, host=WEB_HOST, port=WEB_PORT)
+    except OSError as e:
+        if "Address already in use" in str(e):
+            print(f"⚠ Port {WEB_PORT} is already in use!")
+            print(f"Please try a different port in config.py or close other applications using port {WEB_PORT}")
+        else:
+            print(f"⚠ Server error: {e}")
+    except Exception as e:
+        print(f"⚠ Unexpected error: {e}") 

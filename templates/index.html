@@ -60,6 +60,9 @@
                 <h1><i class="fas fa-chart-line"></i> Warpage Analysis Tool</h1>
                 <p class="mb-0">Advanced warpage data analysis and visualization</p>
             </div>
+            <div class="col-auto d-flex align-items-center">
+                <span class="text-white-50">By CAE Group, SiHun Lee</span>
+            </div>
         </div>
 
         <div class="row mt-4">
@@ -119,6 +122,11 @@
                                 <span class="visually-hidden">Loading...</span>
                             </div>
                             <p class="mt-2">Analyzing data...</p>
+                            <div class="progress mt-2" style="height: 20px;">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                     role="progressbar" style="width: 0%" id="analysisProgress">0%</div>
+                            </div>
+                            <small class="text-muted" id="progressText">Initializing...</small>
                         </div>
                     </div>
                 </div>
@@ -129,11 +137,8 @@
                         <h5><i class="fas fa-download"></i> Export Options</h5>
                     </div>
                     <div class="card-body">
-                        <button class="btn btn-outline-primary w-100 mb-2" onclick="exportPDF()">
+                        <button class="btn btn-outline-primary w-100" onclick="exportPDF()">
                             <i class="fas fa-file-pdf"></i> Export PDF Report
-                        </button>
-                        <button class="btn btn-outline-secondary w-100" onclick="downloadData()">
-                            <i class="fas fa-file-code"></i> Download Analysis Data (JSON)
                         </button>
                     </div>
                 </div>
@@ -257,6 +262,11 @@
             document.getElementById('exportCard').style.display = 'none';
             document.getElementById('analysisSummary').style.display = 'none';
             document.getElementById('resultsTabs').style.display = 'none';
+            
+            // Reset progress
+            document.getElementById('analysisProgress').style.width = '0%';
+            document.getElementById('analysisProgress').textContent = '0%';
+            document.getElementById('progressText').textContent = 'Starting analysis...';
 
             try {
                 const response = await fetch('/api/analyze', {
@@ -277,6 +287,11 @@
                 if (data.success) {
                     currentAnalysis = data;
                     currentFiles = data.summary.files;
+                    
+                    // Update progress to 100%
+                    document.getElementById('analysisProgress').style.width = '100%';
+                    document.getElementById('analysisProgress').textContent = '100%';
+                    document.getElementById('progressText').textContent = 'Analysis completed!';
                     
                     // Update summary
                     document.getElementById('summaryFolder').textContent = data.summary.folder;
@@ -400,30 +415,7 @@
             }
         }
 
-        // Download data
-        async function downloadData() {
-            try {
-                const response = await fetch('/api/download_data');
-                if (response.ok) {
-                    const blob = await response.blob();
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = response.headers.get('content-disposition')?.split('filename=')[1] || 'warpage_analysis.json';
-                    document.body.appendChild(a);
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                    document.body.removeChild(a);
-                    showAlert('Data exported successfully!', 'success');
-                } else {
-                    const data = await response.json();
-                    showAlert(data.error || 'Data export failed', 'danger');
-                }
-            } catch (error) {
-                console.error('Data export error:', error);
-                showAlert('Data export failed: ' + error.message, 'danger');
-            }
-        }
+
 
         // Show alert
         function showAlert(message, type) {

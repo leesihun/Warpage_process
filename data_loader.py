@@ -34,6 +34,9 @@ def load_data_from_file(file_path):
         nonzero_col_mask = ~(np.all(data_array == 0, axis=0))
         data_array = data_array[:, nonzero_col_mask]
         
+        # Nullify -4000 values as artifacts
+        data_array = np.where(data_array == -4000, np.nan, data_array)
+        
         return data_array
     except Exception as e:
         print(f"Error loading {file_path}: {e}")
@@ -133,14 +136,19 @@ def process_folder_data(base_path, folder, row_fraction=1, col_fraction=1, use_o
     file_paths = find_data_files(folder_path, use_original_files)
     
     if not file_paths:
+        print(f"  No files found in {folder}")
         return []
     
+    print(f"  Found {len(file_paths)} files to process")
     results = []
     
-    for file_path in file_paths:
+    for i, file_path in enumerate(file_paths):
+        print(f"    Processing file {i+1}/{len(file_paths)}: {os.path.basename(file_path)}")
+        
         # Load raw data
         raw_data = load_data_from_file(file_path)
         if raw_data is None:
+            print(f"    ⚠ Skipped {os.path.basename(file_path)} (load failed)")
             continue
         
         # Extract center region
@@ -153,7 +161,9 @@ def process_folder_data(base_path, folder, row_fraction=1, col_fraction=1, use_o
         data_filename = os.path.basename(file_path)
         
         results.append((center_data, stats, data_filename))
+        print(f"    ✓ Processed {os.path.basename(file_path)}: {center_data.shape}")
     
+    print(f"  ✓ Completed {folder}: {len(results)} files processed")
     return results
 
 
