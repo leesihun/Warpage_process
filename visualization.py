@@ -391,12 +391,19 @@ def create_warpage_distribution_plot(folder_data, figsize=(10, 6)):
     Returns:
         matplotlib.figure.Figure: The created figure
     """
-    # Calculate height as 0.45 of the provided figsize height
+    # Keep original page size, but make plot smaller (0.45 height) in upper half
     width, height = figsize
-    new_height = height * 0.45
-    new_figsize = (width, new_height)
+    plot_height = height * 0.45
     
-    fig, ax = plt.subplots(figsize=new_figsize)
+    fig = plt.figure(figsize=figsize)
+    fig.suptitle('Warpage Range Distribution', fontsize=16, fontweight='bold')
+    
+    # Create single plot in the upper half of the page
+    ax = plt.subplot(1, 1, 1)
+    
+    # Position the plot in the upper half, leaving bottom half empty
+    # Make it smaller to match the 0.45 height requirement
+    ax.set_position([0.1, 0.6, 0.8, 0.3])  # [left, bottom, width, height]
     
     # Calculate (max-min) values for each file
     max_min_values = []
@@ -446,13 +453,20 @@ def create_mean_range_combined_plot(folder_data, figsize=(10, 12)):
     Returns:
         matplotlib.figure.Figure: The created figure
     """
-    # Calculate height as 0.45 of the provided figsize height
+    # Keep original page size, but make plots smaller (0.45 height)
     width, height = figsize
-    new_height = height * 0.45
-    new_figsize = (width, new_height)
+    plot_height = height * 0.45
     
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=new_figsize)
+    fig = plt.figure(figsize=figsize)
     fig.suptitle('Statistical Comparison - Mean and Range', fontsize=16, fontweight='bold')
+    
+    # Create two subplots in the upper half of the page
+    ax1 = plt.subplot(2, 1, 1)
+    ax2 = plt.subplot(2, 1, 2)
+    
+    # Adjust the position to use only the upper half with proper spacing
+    ax1.set_position([0.1, 0.6, 0.8, 0.3])   # [left, bottom, width, height]
+    ax2.set_position([0.1, 0.15, 0.8, 0.3])  # [left, bottom, width, height]
     
     # Simplify file IDs to just numbers
     file_ids = list(folder_data.keys())
@@ -499,13 +513,20 @@ def create_minmax_std_combined_plot(folder_data, figsize=(10, 12)):
     Returns:
         matplotlib.figure.Figure: The created figure
     """
-    # Calculate height as 0.45 of the provided figsize height
+    # Keep original page size, but make plots smaller (0.45 height)
     width, height = figsize
-    new_height = height * 0.45
-    new_figsize = (width, new_height)
+    plot_height = height * 0.45
     
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=new_figsize)
+    fig = plt.figure(figsize=figsize)
     fig.suptitle('Statistical Comparison - Min-Max and Standard Deviation', fontsize=16, fontweight='bold')
+    
+    # Create two subplots in the upper half of the page
+    ax1 = plt.subplot(2, 1, 1)
+    ax2 = plt.subplot(2, 1, 2)
+    
+    # Adjust the position to use only the upper half with proper spacing
+    ax1.set_position([0.1, 0.6, 0.8, 0.3])   # [left, bottom, width, height]
+    ax2.set_position([0.1, 0.15, 0.8, 0.3])  # [left, bottom, width, height]
     
     # Simplify file IDs to just numbers
     file_ids = list(folder_data.keys())
