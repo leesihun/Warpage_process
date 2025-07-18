@@ -238,6 +238,7 @@ data/
 - **Improved**: X-axis shows (Max - Min) warpage values, Y-axis shows probability density
 - **Updated**: Added mean line and statistics box showing mean, std, min, max values
 - **Enhanced**: Better statistical analysis of warpage range distribution across files
+- **Optimized**: Statistical plots now use 0.45 height of PDF page for better space utilization
 
 ### Version 3.8.0
 - **Fixed**: Web GUI statistical plots now match PDF export layout exactly

@@ -391,7 +391,12 @@ def create_warpage_distribution_plot(folder_data, figsize=(10, 6)):
     Returns:
         matplotlib.figure.Figure: The created figure
     """
-    fig, ax = plt.subplots(figsize=figsize)
+    # Calculate height as 0.45 of the provided figsize height
+    width, height = figsize
+    new_height = height * 0.45
+    new_figsize = (width, new_height)
+    
+    fig, ax = plt.subplots(figsize=new_figsize)
     
     # Calculate (max-min) values for each file
     max_min_values = []
@@ -441,7 +446,12 @@ def create_mean_range_combined_plot(folder_data, figsize=(10, 12)):
     Returns:
         matplotlib.figure.Figure: The created figure
     """
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=figsize)
+    # Calculate height as 0.45 of the provided figsize height
+    width, height = figsize
+    new_height = height * 0.45
+    new_figsize = (width, new_height)
+    
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=new_figsize)
     fig.suptitle('Statistical Comparison - Mean and Range', fontsize=16, fontweight='bold')
     
     # Simplify file IDs to just numbers
@@ -489,7 +499,12 @@ def create_minmax_std_combined_plot(folder_data, figsize=(10, 12)):
     Returns:
         matplotlib.figure.Figure: The created figure
     """
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=figsize)
+    # Calculate height as 0.45 of the provided figsize height
+    width, height = figsize
+    new_height = height * 0.45
+    new_figsize = (width, new_height)
+    
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=new_figsize)
     fig.suptitle('Statistical Comparison - Min-Max and Standard Deviation', fontsize=16, fontweight='bold')
     
     # Simplify file IDs to just numbers
