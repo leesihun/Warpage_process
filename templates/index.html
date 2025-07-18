@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Warpage Analysis Tool</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .loading {
+            display: none;
+        }
+        .plot-container {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .stats-card {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .btn-custom {
+            background: linear-gradient(45deg, #007bff, #0056b3);
+            border: none;
+            color: white;
+            transition: all 0.3s ease;
+        }
+        .btn-custom:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        .analysis-summary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .file-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .plot-image {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <!-- Header -->
+        <div class="row bg-primary text-white py-3">
+            <div class="col">
+                <h1><i class="fas fa-chart-line"></i> Warpage Analysis Tool</h1>
+                <p class="mb-0">Advanced warpage data analysis and visualization</p>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <!-- Analysis Form -->
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5><i class="fas fa-cog"></i> Analysis Settings</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="analysisForm">
+                            <div class="mb-3">
+                                <label for="folderSelect" class="form-label">Data Folder</label>
+                                <select class="form-select" id="folderSelect" required>
+                                    <option value="">Loading folders...</option>
+                                </select>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">File Type</label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="fileType" id="originalFiles" value="original" checked>
+                                    <label class="form-check-label" for="originalFiles">
+                                        Original Files (@_ORI.txt)
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="fileType" id="correctedFiles" value="corrected">
+                                    <label class="form-check-label" for="correctedFiles">
+                                        Corrected Files (.txt)
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="rowFraction" class="form-label">Row Fraction</label>
+                                        <input type="number" class="form-control" id="rowFraction" value="1.0" min="0.1" max="1.0" step="0.1">
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="colFraction" class="form-label">Column Fraction</label>
+                                        <input type="number" class="form-control" id="colFraction" value="1.0" min="0.1" max="1.0" step="0.1">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button type="submit" class="btn btn-custom btn-lg w-100">
+                                <i class="fas fa-play"></i> Run Analysis
+                            </button>
+                        </form>
+
+                        <div class="loading mt-3 text-center">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2">Analyzing data...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Export Options -->
+                <div class="card mt-3" id="exportCard" style="display: none;">
+                    <div class="card-header bg-success text-white">
+                        <h5><i class="fas fa-download"></i> Export Options</h5>
+                    </div>
+                    <div class="card-body">
+                        <button class="btn btn-outline-primary w-100 mb-2" onclick="exportPDF()">
+                            <i class="fas fa-file-pdf"></i> Export PDF Report
+                        </button>
+                        <button class="btn btn-outline-secondary w-100" onclick="downloadData()">
+                            <i class="fas fa-file-code"></i> Download Analysis Data (JSON)
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results Display -->
+            <div class="col-md-8">
+                <!-- Analysis Summary -->
+                <div id="analysisSummary" style="display: none;">
+                    <div class="analysis-summary">
+                        <h4><i class="fas fa-chart-bar"></i> Analysis Summary</h4>
+                        <div class="row">
+                            <div class="col-md-3">
+                                <h6>Folder</h6>
+                                <p id="summaryFolder">-</p>
+                            </div>
+                            <div class="col-md-3">
+                                <h6>Files Processed</h6>
+                                <p id="summaryFileCount">-</p>
+                            </div>
+                            <div class="col-md-3">
+                                <h6>Total Data Points</h6>
+                                <p id="summaryDataPoints">-</p>
+                            </div>
+                            <div class="col-md-3">
+                                <h6>File Type</h6>
+                                <p id="summaryFileType">-</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Navigation Tabs -->
+                <ul class="nav nav-tabs" id="resultsTabs" style="display: none;">
+                    <li class="nav-item">
+                        <a class="nav-link active" id="individual-tab" data-bs-toggle="tab" href="#individual">
+                            <i class="fas fa-chart-area"></i> Individual Plots
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" id="statistics-tab" data-bs-toggle="tab" href="#statistics">
+                            <i class="fas fa-chart-pie"></i> Statistical Analysis
+                        </a>
+                    </li>
+                </ul>
+
+                <!-- Tab Content -->
+                <div class="tab-content mt-3" id="resultsContent">
+                    <!-- Individual Plots Tab -->
+                    <div class="tab-pane fade show active" id="individual">
+                        <div id="individualPlots">
+                            <!-- Individual plots will be loaded here -->
+                        </div>
+                    </div>
+
+                    <!-- Statistics Tab -->
+                    <div class="tab-pane fade" id="statistics">
+                        <div id="statisticsPlot" class="text-center">
+                            <!-- Statistical plot will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // Global variables
+        let currentAnalysis = null;
+        let currentFiles = [];
+
+        // Load folders on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadFolders();
+        });
+
+        // Load available folders
+        async function loadFolders() {
+            try {
+                const response = await fetch('/api/folders');
+                const data = await response.json();
+                
+                const select = document.getElementById('folderSelect');
+                select.innerHTML = '<option value="">Select a folder...</option>';
+                
+                if (data.folders && data.folders.length > 0) {
+                    data.folders.forEach(folder => {
+                        const option = document.createElement('option');
+                        option.value = folder;
+                        option.textContent = folder;
+                        select.appendChild(option);
+                    });
+                } else {
+                    select.innerHTML = '<option value="">No folders found</option>';
+                }
+            } catch (error) {
+                console.error('Error loading folders:', error);
+                showAlert('Error loading folders', 'danger');
+            }
+        }
+
+        // Handle form submission
+        document.getElementById('analysisForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const folder = document.getElementById('folderSelect').value;
+            const fileType = document.querySelector('input[name="fileType"]:checked').value;
+            const rowFraction = parseFloat(document.getElementById('rowFraction').value);
+            const colFraction = parseFloat(document.getElementById('colFraction').value);
+
+            if (!folder) {
+                showAlert('Please select a folder', 'warning');
+                return;
+            }
+
+            // Show loading
+            document.querySelector('.loading').style.display = 'block';
+            document.getElementById('exportCard').style.display = 'none';
+            document.getElementById('analysisSummary').style.display = 'none';
+            document.getElementById('resultsTabs').style.display = 'none';
+
+            try {
+                const response = await fetch('/api/analyze', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        folder: folder,
+                        use_original: fileType === 'original',
+                        row_fraction: rowFraction,
+                        col_fraction: colFraction
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    currentAnalysis = data;
+                    currentFiles = data.summary.files;
+                    
+                    // Update summary
+                    document.getElementById('summaryFolder').textContent = data.summary.folder;
+                    document.getElementById('summaryFileCount').textContent = data.summary.file_count;
+                    document.getElementById('summaryDataPoints').textContent = data.summary.total_data_points.toLocaleString();
+                    document.getElementById('summaryFileType').textContent = fileType === 'original' ? 'Original Files' : 'Corrected Files';
+                    
+                    // Show results
+                    document.getElementById('analysisSummary').style.display = 'block';
+                    document.getElementById('resultsTabs').style.display = 'block';
+                    document.getElementById('exportCard').style.display = 'block';
+                    
+                    // Load individual plots
+                    await loadIndividualPlots();
+                    
+                    showAlert('Analysis completed successfully!', 'success');
+                } else {
+                    showAlert(data.error || 'Analysis failed', 'danger');
+                }
+            } catch (error) {
+                console.error('Analysis error:', error);
+                showAlert('Analysis failed: ' + error.message, 'danger');
+            } finally {
+                document.querySelector('.loading').style.display = 'none';
+            }
+        });
+
+        // Load individual plots
+        async function loadIndividualPlots() {
+            const container = document.getElementById('individualPlots');
+            container.innerHTML = '<div class="text-center"><div class="spinner-border"></div><p>Loading plots...</p></div>';
+
+            try {
+                const plotsHTML = [];
+                
+                for (const fileId of currentFiles) {
+                    const response = await fetch(`/api/plot/${fileId}`);
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        plotsHTML.push(`
+                            <div class="plot-container">
+                                <h5>${fileId} - ${data.filename}</h5>
+                                <img src="data:image/png;base64,${data.image}" class="plot-image" alt="${fileId} plot">
+                                <div class="stats-card mt-2">
+                                    <h6>Statistics</h6>
+                                    <div class="row">
+                                        <div class="col-md-3">
+                                            <strong>Shape:</strong><br>${data.stats.shape}
+                                        </div>
+                                        <div class="col-md-3">
+                                            <strong>Min:</strong><br>${data.stats.min.toFixed(6)}
+                                        </div>
+                                        <div class="col-md-3">
+                                            <strong>Max:</strong><br>${data.stats.max.toFixed(6)}
+                                        </div>
+                                        <div class="col-md-3">
+                                            <strong>Mean:</strong><br>${data.stats.mean.toFixed(6)}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `);
+                    }
+                }
+                
+                container.innerHTML = plotsHTML.join('');
+            } catch (error) {
+                console.error('Error loading plots:', error);
+                container.innerHTML = '<div class="alert alert-danger">Error loading plots</div>';
+            }
+        }
+
+        // Load statistical plot
+        document.getElementById('statistics-tab').addEventListener('click', async function() {
+            const container = document.getElementById('statisticsPlot');
+            container.innerHTML = '<div class="text-center"><div class="spinner-border"></div><p>Loading statistical analysis...</p></div>';
+
+            try {
+                const response = await fetch('/api/stats_plot');
+                const data = await response.json();
+                
+                if (data.success) {
+                    container.innerHTML = `
+                        <div class="plot-container">
+                            <h5>Statistical Comparison</h5>
+                            <img src="data:image/png;base64,${data.image}" class="plot-image" alt="Statistical comparison">
+                        </div>
+                    `;
+                } else {
+                    container.innerHTML = '<div class="alert alert-danger">Error loading statistical plot</div>';
+                }
+            } catch (error) {
+                console.error('Error loading statistical plot:', error);
+                container.innerHTML = '<div class="alert alert-danger">Error loading statistical plot</div>';
+            }
+        });
+
+        // Export PDF
+        async function exportPDF() {
+            try {
+                const response = await fetch('/api/export_pdf');
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = response.headers.get('content-disposition')?.split('filename=')[1] || 'warpage_analysis.pdf';
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    showAlert('PDF exported successfully!', 'success');
+                } else {
+                    const data = await response.json();
+                    showAlert(data.error || 'PDF export failed', 'danger');
+                }
+            } catch (error) {
+                console.error('PDF export error:', error);
+                showAlert('PDF export failed: ' + error.message, 'danger');
+            }
+        }
+
+        // Download data
+        async function downloadData() {
+            try {
+                const response = await fetch('/api/download_data');
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = response.headers.get('content-disposition')?.split('filename=')[1] || 'warpage_analysis.json';
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    showAlert('Data exported successfully!', 'success');
+                } else {
+                    const data = await response.json();
+                    showAlert(data.error || 'Data export failed', 'danger');
+                }
+            } catch (error) {
+                console.error('Data export error:', error);
+                showAlert('Data export failed: ' + error.message, 'danger');
+            }
+        }
+
+        // Show alert
+        function showAlert(message, type) {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+            alertDiv.style.top = '20px';
+            alertDiv.style.right = '20px';
+            alertDiv.style.zIndex = '9999';
+            alertDiv.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.body.appendChild(alertDiv);
+            
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                if (alertDiv.parentNode) {
+                    alertDiv.parentNode.removeChild(alertDiv);
+                }
+            }, 5000);
+        }
+    </script>
+</body>
+</html> 

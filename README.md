@@ -1,6 +1,6 @@
 # Warpage Data Analysis Tool
 
-A modular Python tool for analyzing warpage data across different folders. This refactored solution provides data loading, statistical analysis, visualization, and PDF export capabilities with consistent scaling and file size reporting.
+A modular Python tool for analyzing warpage data across different folders. This refactored solution provides data loading, statistical analysis, visualization, PDF export capabilities, and a modern web-based GUI with consistent scaling and file size reporting.
 
 ## 📁 Project Structure
 
@@ -14,7 +14,11 @@ PEMTRON_warpage/
 ├── pdf_exporter.py      # PDF export functionality
 ├── statistics.py        # Statistical analysis
 ├── visualization.py     # Plotting and visualization
+├── web_gui.py           # Web-based GUI
+├── templates/            # HTML templates for web GUI
+│   └── index.html       # Main web interface
 ├── requirements.txt     # Python package dependencies
+├── requirements_web.txt # Web GUI dependencies
 └── README.md            # This file
 ```
 
@@ -25,11 +29,35 @@ PEMTRON_warpage/
 - pip package manager
 
 ### Install Dependencies
+
+#### For Command Line Interface
 ```bash
 pip install -r requirements.txt
 ```
 
+#### For Web GUI
+```bash
+pip install -r requirements_web.txt
+```
+
 ## 🚀 Quick Start
+
+### Web GUI (Recommended)
+
+Start the web interface for an easy-to-use graphical interface:
+
+```bash
+python web_gui.py
+```
+
+Then open your browser and go to: http://localhost:5000
+
+**Features:**
+- Modern, responsive web interface
+- Real-time data visualization
+- Interactive plot generation
+- PDF export functionality
+- No installation required - runs in any web browser
 
 ### Command Line Usage
 
@@ -168,11 +196,12 @@ data/
 
 ## 🎯 Key Features
 
+- **Web GUI**: Modern, responsive web interface for easy analysis
 - **Modular Design**: Well-organized code structure with separate modules for different functionalities
 - **Multi-File Processing**: Processes ALL files matching the pattern in each folder automatically
 - **Configurable Parameters**: Customize visualization and analysis settings
 - **Full Data Analysis**: Analyzes complete warpage data (no center region extraction)
-- **High-Resolution Output**: 600 DPI PDF exports
+- **High-Resolution Output**: 600 DPI PDF exports with A4 page size
 - **Consistent Scaling**: Same x,y scale for all graphs for proper comparison
 - **Customizable Colormaps**: Support for various colormaps including scientific and traditional options
 - **Colorbar Support**: Optional colorbars show the relationship between colors and data values
@@ -181,6 +210,7 @@ data/
 - **Interactive Mode**: User-friendly interface for setting parameters
 - **Command Line Interface**: Easy automation and scripting support
 - **File Type Selection**: Choose between original (@_ORI.txt) or corrected (.txt) files
+- **Zero Data Removal**: Automatically removes all-zero rows and columns (dummy data) by default
 - **Maintainable Code**: Clean separation of concerns for easy maintenance and extension
 
 ## 🚨 Troubleshooting
@@ -195,7 +225,13 @@ data/
 
 ## 📝 Version History
 
-### Version 3.2.0 (Current)
+### Version 3.3.0 (Current)
+- **New**: Web-based GUI with modern, responsive interface
+- **Enhanced**: A4 page size for PDF exports with proper plot sizing
+- **New**: Automatic removal of all-zero rows and columns (dummy data) by default
+- **Improved**: Better font sizing and layout for PDF reports
+
+### Version 3.2.0
 - **Enhanced**: Internal file renaming - files are now renamed from File_01 to File_N internally
 - **Improved**: Clean display names in plots and statistical information
 - **Enhanced**: Simplified file identification in all visualizations and reports
