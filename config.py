@@ -21,8 +21,14 @@ DEFAULT_CONFIG = {
     "use_original_files": True                 # Use original files (@_ORI.txt) vs corrected files (.txt)
 }
 
-# Report directory settings
+# Directory settings
+DATA_DIR = './data/'
 REPORT_DIR = 'report'
+
+# Web GUI settings
+WEB_PORT = 9410072
+WEB_HOST = '0.0.0.0'
+WEB_DEBUG = True
 
 # File patterns
 FILE_PATTERNS = {

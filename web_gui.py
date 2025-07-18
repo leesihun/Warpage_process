@@ -18,7 +18,7 @@ import numpy as np
 from io import BytesIO
 
 # Import our analysis modules
-from config import DATA_DIR, REPORT_DIR
+from config import DATA_DIR, REPORT_DIR, WEB_PORT, WEB_HOST, WEB_DEBUG
 from data_loader import process_folder_data, find_data_files
 from analyzer import analyze_data
 from statistics import calculate_statistics
@@ -257,5 +257,5 @@ if __name__ == '__main__':
     os.makedirs('templates', exist_ok=True)
     
     print("Starting Warpage Analysis Web GUI...")
-    print("Open your browser and go to: http://localhost:5000")
-    app.run(debug=True, host='0.0.0.0', port=5000) 
+    print(f"Open your browser and go to: http://localhost:{WEB_PORT}")
+    app.run(debug=WEB_DEBUG, host=WEB_HOST, port=WEB_PORT) 

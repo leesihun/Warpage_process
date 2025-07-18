@@ -40,6 +40,8 @@ pip install -r requirements.txt
 pip install -r requirements_web.txt
 ```
 
+**Note**: The web GUI runs on port 9410072 by default. You can change this in `config.py` by modifying the `WEB_PORT` variable.
+
 ## 🚀 Quick Start
 
 ### Web GUI (Recommended)
@@ -50,7 +52,7 @@ Start the web interface for an easy-to-use graphical interface:
 python web_gui.py
 ```
 
-Then open your browser and go to: http://localhost:5000
+Then open your browser and go to: http://localhost:9410072
 
 **Features:**
 - Modern, responsive web interface
