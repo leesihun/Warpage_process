@@ -1,11 +1,42 @@
 #!/usr/bin/env python3
 """
+Warpage Analyzer용 시각화 함수들
 Visualization functions for Warpage Analyzer
 """
 
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+# 고급 통계 함수들 가져오기 / Import advanced statistics functions
+try:
+    from advanced_statistics import ADVANCED_PLOT_FUNCTIONS
+except ImportError:
+    ADVANCED_PLOT_FUNCTIONS = {}
+
+
+def get_readable_x_axis_ticks(x_pos, labels, max_labels=10):
+    """
+    Get readable x-axis tick positions and labels by selecting a subset when there are too many.
+    
+    Args:
+        x_pos (array): X-axis positions (e.g., np.arange(len(data)))
+        labels (list): All labels corresponding to x_pos
+        max_labels (int): Maximum number of labels to show
+        
+    Returns:
+        tuple: (selected_x_positions, selected_labels)
+    """
+    if len(labels) <= max_labels:
+        # If we have few enough labels, show them all
+        return x_pos, labels
+    else:
+        # Calculate step size to show approximately max_labels
+        step = max(1, len(labels) // max_labels)
+        # Select every nth position and label
+        selected_indices = range(0, len(labels), step)
+        selected_x_pos = x_pos[selected_indices]
+        selected_labels = [labels[i] for i in selected_indices]
+        return selected_x_pos, selected_labels
 
 
 def create_comparison_plot(folder_data, figsize=(20, 5), vmin=None, vmax=None, cmap='jet', colorbar=True):
@@ -63,6 +94,41 @@ def create_comparison_plot(folder_data, figsize=(20, 5), vmin=None, vmax=None, c
     
     plt.tight_layout()
     return fig
+
+
+def create_comprehensive_advanced_analysis(folder_data, figsize=(20, 24)):
+    """
+    종합 고급 분석 보고서 생성 / Create comprehensive advanced analysis report
+    
+    Args:
+        folder_data (dict): 파일 데이터 / File data
+        figsize (tuple): 그래프 크기 / Figure size
+        
+    Returns:
+        list: 고급 분석 그래프들의 목록 / List of advanced analysis figures
+    """
+    figures = []
+    
+    # 고급 분석 그래프들 생성 (성능을 위해 핵심 분석만 선택) / Generate essential advanced analysis plots for performance
+    plot_configs = [
+        ('violin_plots', 'Distribution Analysis - Violin Plots'),
+        ('percentile_analysis', 'Percentile Analysis'),
+        ('process_capability', 'Process Capability Analysis'),
+        ('gradient_analysis', 'Spatial Gradient Analysis'),
+        ('control_charts', 'Statistical Process Control')
+    ]
+    
+    for plot_key, plot_title in plot_configs:
+        if plot_key in ADVANCED_PLOT_FUNCTIONS:
+            try:
+                fig = ADVANCED_PLOT_FUNCTIONS[plot_key](folder_data)
+                if fig:
+                    figures.append((fig, plot_title))
+                    print(f"  OK Generated: {plot_title}")
+            except Exception as e:
+                print(f"  WARNING: Failed to generate {plot_title}: {e}")
+    
+    return figures
 
 
 def create_individual_plot(file_id, data, stats, filename, figsize=(8, 6), vmin=None, vmax=None, cmap='jet', colorbar=True):
@@ -158,86 +224,97 @@ def create_3d_surface_plot(folder_data, figsize=(20, 15)):
             fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5)
     
     plt.tight_layout()
-    return fig 
+    return fig
 
 
-def create_statistical_comparison_plots(folder_data, figsize=(15, 10)):
+def create_statistical_comparison_plots(folder_data, figsize=(16, 12)):
     """
+    분포 포함 종합 통계 비교 그래프 생성
     Create comprehensive statistical comparison plots including warpage distribution.
     
     Args:
-        folder_data (dict): Dictionary with file_id as key and (data, stats, filename) as value
-        figsize (tuple): Figure size
+        folder_data (dict): 파일 ID를 키로 하고 (data, stats, filename)를 값으로 하는 딕셔너리
+                           Dictionary with file_id as key and (data, stats, filename) as value
+        figsize (tuple): 그래프 크기 / Figure size
         
     Returns:
-        matplotlib.figure.Figure: The created figure
+        matplotlib.figure.Figure: 생성된 그래프 / The created figure
     """
     fig = plt.figure(figsize=figsize)
-    fig.suptitle('Statistical Comparison - Warpage Analysis', fontsize=14, fontweight='bold')
+    fig.suptitle('Statistical Comparison - Warpage Analysis', fontsize=16, fontweight='bold', y=0.98)
     
-    # Create subplots for different statistical analyses
-    gs = fig.add_gridspec(2, 2, hspace=0.4, wspace=0.4)
+    # 다른 통계 분석을 위한 서브플롯 생성 / Create subplots for different statistical analyses
+    gs = fig.add_gridspec(2, 2, hspace=0.35, wspace=0.3, top=0.92, bottom=0.08, left=0.08, right=0.95)
     
-    # Simplify file IDs to just numbers
+    # 파일 ID를 숫자로 단순화 / Simplify file IDs to just numbers
     file_ids = list(folder_data.keys())
     simple_file_ids = [fid.replace('File_', '') for fid in file_ids]
     
-    # 1. Statistical Summary Bar Chart
-    ax1 = fig.add_subplot(gs[0, 0])
+    # 데이터 추출 / Extract data
     means = [stats['mean'] for _, (_, stats, _) in folder_data.items()]
     stds = [stats['std'] for _, (_, stats, _) in folder_data.items()]
-    
+    ranges = [stats['range'] for _, (_, stats, _) in folder_data.items()]
+    mins = [stats['min'] for _, (_, stats, _) in folder_data.items()]
+    maxs = [stats['max'] for _, (_, stats, _) in folder_data.items()]
     x_pos = np.arange(len(means))
-    ax1.bar(x_pos, means, yerr=stds, capsize=5, alpha=0.7)
-    ax1.set_xlabel('Files', fontsize=10)
-    ax1.set_ylabel('Mean Warpage Value', fontsize=10)
-    ax1.set_title('Mean Warpage Values with Standard Deviation', fontsize=11)
-    ax1.set_xticks(x_pos)
-    ax1.set_xticklabels(simple_file_ids, rotation=45, ha='right', fontsize=9)
-    ax1.grid(True, alpha=0.3)
-    ax1.tick_params(axis='both', which='major', labelsize=9)
+    
+    # 1. Mean Warpage Values with Standard Deviation
+    ax1 = fig.add_subplot(gs[0, 0])
+    ax1.bar(x_pos, means, yerr=stds, capsize=5, alpha=0.7, color='skyblue', edgecolor='navy', linewidth=0.8)
+    ax1.set_xlabel('Files', fontsize=11)
+    ax1.set_ylabel('Mean Warpage Value', fontsize=11)
+    ax1.set_title('Mean Warpage Values with Std Dev', fontsize=12, fontweight='bold')
+    # Use smart x-axis tick selection for readability
+    selected_x_pos, selected_labels = get_readable_x_axis_ticks(x_pos, simple_file_ids)
+    ax1.set_xticks(selected_x_pos)
+    ax1.set_xticklabels(selected_labels, rotation=45, ha='right', fontsize=10)
+    ax1.grid(True, alpha=0.3, linestyle='--')
+    ax1.tick_params(axis='both', which='major', labelsize=10)
     
     # 2. Range Comparison
     ax2 = fig.add_subplot(gs[0, 1])
-    ranges = [stats['range'] for _, (_, stats, _) in folder_data.items()]
-    ax2.bar(x_pos, ranges, alpha=0.7, color='orange')
-    ax2.set_xlabel('Files', fontsize=10)
-    ax2.set_ylabel('Warpage Range', fontsize=10)
-    ax2.set_title('Warpage Range Comparison', fontsize=11)
-    ax2.set_xticks(x_pos)
-    ax2.set_xticklabels(simple_file_ids, rotation=45, ha='right', fontsize=9)
-    ax2.grid(True, alpha=0.3)
-    ax2.tick_params(axis='both', which='major', labelsize=9)
+    ax2.bar(x_pos, ranges, alpha=0.7, color='orange', edgecolor='darkorange', linewidth=0.8)
+    ax2.set_xlabel('Files', fontsize=11)
+    ax2.set_ylabel('Warpage Range', fontsize=11)
+    ax2.set_title('Warpage Range Comparison', fontsize=12, fontweight='bold')
+    # Use smart x-axis tick selection for readability
+    selected_x_pos, selected_labels = get_readable_x_axis_ticks(x_pos, simple_file_ids)
+    ax2.set_xticks(selected_x_pos)
+    ax2.set_xticklabels(selected_labels, rotation=45, ha='right', fontsize=10)
+    ax2.grid(True, alpha=0.3, linestyle='--')
+    ax2.tick_params(axis='both', which='major', labelsize=10)
     
     # 3. Min-Max Comparison
     ax3 = fig.add_subplot(gs[1, 0])
-    mins = [stats['min'] for _, (_, stats, _) in folder_data.items()]
-    maxs = [stats['max'] for _, (_, stats, _) in folder_data.items()]
-    
-    ax3.plot(x_pos, mins, 'o-', label='Min', color='red', alpha=0.7)
-    ax3.plot(x_pos, maxs, 's-', label='Max', color='blue', alpha=0.7)
+    ax3.plot(x_pos, mins, 'o-', label='Min', color='red', alpha=0.8, linewidth=2, markersize=6)
+    ax3.plot(x_pos, maxs, 's-', label='Max', color='blue', alpha=0.8, linewidth=2, markersize=6)
     ax3.fill_between(x_pos, mins, maxs, alpha=0.2, color='gray')
-    ax3.set_xlabel('Files', fontsize=10)
-    ax3.set_ylabel('Warpage Value', fontsize=10)
-    ax3.set_title('Min-Max Warpage Values', fontsize=11)
-    ax3.set_xticks(x_pos)
-    ax3.set_xticklabels(simple_file_ids, rotation=45, ha='right', fontsize=9)
-    ax3.legend(fontsize=9)
-    ax3.grid(True, alpha=0.3)
-    ax3.tick_params(axis='both', which='major', labelsize=9)
+    ax3.set_xlabel('Files', fontsize=11)
+    ax3.set_ylabel('Warpage Value', fontsize=11)
+    ax3.set_title('Min-Max Warpage Values', fontsize=12, fontweight='bold')
+    # Use smart x-axis tick selection for readability
+    selected_x_pos, selected_labels = get_readable_x_axis_ticks(x_pos, simple_file_ids)
+    ax3.set_xticks(selected_x_pos)
+    ax3.set_xticklabels(selected_labels, rotation=45, ha='right', fontsize=10)
+    ax3.legend(fontsize=10, loc='best')
+    ax3.grid(True, alpha=0.3, linestyle='--')
+    ax3.tick_params(axis='both', which='major', labelsize=10)
     
     # 4. Standard Deviation Analysis
     ax4 = fig.add_subplot(gs[1, 1])
-    ax4.bar(x_pos, stds, alpha=0.7, color='green')
-    ax4.set_xlabel('Files', fontsize=10)
-    ax4.set_ylabel('Standard Deviation', fontsize=10)
-    ax4.set_title('Standard Deviation Comparison', fontsize=11)
-    ax4.set_xticks(x_pos)
-    ax4.set_xticklabels(simple_file_ids, rotation=45, ha='right', fontsize=9)
-    ax4.grid(True, alpha=0.3)
-    ax4.tick_params(axis='both', which='major', labelsize=9)
+    ax4.bar(x_pos, stds, alpha=0.7, color='green', edgecolor='darkgreen', linewidth=0.8)
+    ax4.set_xlabel('Files', fontsize=11)
+    ax4.set_ylabel('Standard Deviation', fontsize=11)
+    ax4.set_title('Standard Deviation Comparison', fontsize=12, fontweight='bold')
+    # Use smart x-axis tick selection for readability
+    selected_x_pos, selected_labels = get_readable_x_axis_ticks(x_pos, simple_file_ids)
+    ax4.set_xticks(selected_x_pos)
+    ax4.set_xticklabels(selected_labels, rotation=45, ha='right', fontsize=10)
+    ax4.grid(True, alpha=0.3, linestyle='--')
+    ax4.tick_params(axis='both', which='major', labelsize=10)
     
-    plt.tight_layout()
+    # 자동 레이아웃 조정 제거하고 수동 설정 사용
+    # Don't use plt.tight_layout() as we've manually set the gridspec
     return fig 
 
 
@@ -266,8 +343,10 @@ def create_mean_comparison_plot(folder_data, figsize=(10, 6)):
     ax.set_xlabel('Files', fontsize=12)
     ax.set_ylabel('Mean Warpage Value', fontsize=12)
     ax.set_title('Mean Warpage Values with Standard Deviation', fontsize=14, fontweight='bold')
-    ax.set_xticks(x_pos)
-    ax.set_xticklabels(simple_file_ids, rotation=45, ha='right', fontsize=10)
+    # Use smart x-axis tick selection for readability
+    selected_x_pos, selected_labels = get_readable_x_axis_ticks(x_pos, simple_file_ids)
+    ax.set_xticks(selected_x_pos)
+    ax.set_xticklabels(selected_labels, rotation=45, ha='right', fontsize=10)
     ax.grid(True, alpha=0.3)
     ax.tick_params(axis='both', which='major', labelsize=10)
     
@@ -299,8 +378,10 @@ def create_range_comparison_plot(folder_data, figsize=(10, 6)):
     ax.set_xlabel('Files', fontsize=12)
     ax.set_ylabel('Warpage Range', fontsize=12)
     ax.set_title('Warpage Range Comparison', fontsize=14, fontweight='bold')
-    ax.set_xticks(x_pos)
-    ax.set_xticklabels(simple_file_ids, rotation=45, ha='right', fontsize=10)
+    # Use smart x-axis tick selection for readability
+    selected_x_pos, selected_labels = get_readable_x_axis_ticks(x_pos, simple_file_ids)
+    ax.set_xticks(selected_x_pos)
+    ax.set_xticklabels(selected_labels, rotation=45, ha='right', fontsize=10)
     ax.grid(True, alpha=0.3)
     ax.tick_params(axis='both', which='major', labelsize=10)
     
@@ -335,8 +416,10 @@ def create_minmax_comparison_plot(folder_data, figsize=(10, 6)):
     ax.set_xlabel('Files', fontsize=12)
     ax.set_ylabel('Warpage Value', fontsize=12)
     ax.set_title('Min-Max Warpage Values', fontsize=14, fontweight='bold')
-    ax.set_xticks(x_pos)
-    ax.set_xticklabels(simple_file_ids, rotation=45, ha='right', fontsize=10)
+    # Use smart x-axis tick selection for readability
+    selected_x_pos, selected_labels = get_readable_x_axis_ticks(x_pos, simple_file_ids)
+    ax.set_xticks(selected_x_pos)
+    ax.set_xticklabels(selected_labels, rotation=45, ha='right', fontsize=10)
     ax.legend(fontsize=10)
     ax.grid(True, alpha=0.3)
     ax.tick_params(axis='both', which='major', labelsize=10)
@@ -369,43 +452,36 @@ def create_std_comparison_plot(folder_data, figsize=(10, 6)):
     ax.set_xlabel('Files', fontsize=12)
     ax.set_ylabel('Standard Deviation', fontsize=12)
     ax.set_title('Standard Deviation Comparison', fontsize=14, fontweight='bold')
-    ax.set_xticks(x_pos)
-    ax.set_xticklabels(simple_file_ids, rotation=45, ha='right', fontsize=10)
+    # Use smart x-axis tick selection for readability
+    selected_x_pos, selected_labels = get_readable_x_axis_ticks(x_pos, simple_file_ids)
+    ax.set_xticks(selected_x_pos)
+    ax.set_xticklabels(selected_labels, rotation=45, ha='right', fontsize=10)
     ax.grid(True, alpha=0.3)
     ax.tick_params(axis='both', which='major', labelsize=10)
     
     plt.tight_layout()
-    return fig 
+    return fig
 
 
-def create_warpage_distribution_plot(folder_data, figsize=(10, 6)):
+def create_warpage_distribution_plot(folder_data, figsize=(10, 8)):
     """
+    워페이지 매개변수 분포 그래프 생성 (max-min 값들의 히스토그램)
     Create a warpage distribution plot showing histogram of (max-min) values.
-    X-axis: (Max - Min) Warpage Value
-    Y-axis: Probability/Frequency
+    X축: (Max - Min) 워페이지 값 / X-axis: (Max - Min) Warpage Value
+    Y축: 확률/빈도 / Y-axis: Probability/Frequency
     
     Args:
-        folder_data (dict): Dictionary with file_id as key and (data, stats, filename) as value
-        figsize (tuple): Figure size
+        folder_data (dict): 파일 ID를 키로 하고 (data, stats, filename)를 값으로 하는 딕셔너리
+                           Dictionary with file_id as key and (data, stats, filename) as value
+        figsize (tuple): 그래프 크기 / Figure size
         
     Returns:
-        matplotlib.figure.Figure: The created figure
+        matplotlib.figure.Figure: 생성된 그래프 / The created figure
     """
-    # Keep original page size, but make plot smaller (0.45 height) in upper half
-    width, height = figsize
-    plot_height = height * 0.45
-    
-    fig = plt.figure(figsize=figsize)
+    fig, ax = plt.subplots(figsize=figsize)
     fig.suptitle('Warpage Range Distribution', fontsize=16, fontweight='bold')
     
-    # Create single plot in the upper half of the page
-    ax = plt.subplot(1, 1, 1)
-    
-    # Position the plot in the upper half, leaving bottom half empty
-    # Make it smaller to match the 0.45 height requirement
-    ax.set_position([0.1, 0.6, 0.8, 0.3])  # [left, bottom, width, height]
-    
-    # Calculate (max-min) values for each file
+    # 각 파일에 대해 (max-min) 값 계산 / Calculate (max-min) values for each file
     max_min_values = []
     for file_id, (data, stats, filename) in folder_data.items():
         max_min_diff = stats['max'] - stats['min']
@@ -439,34 +515,28 @@ def create_warpage_distribution_plot(folder_data, figsize=(10, 6)):
     ax.tick_params(axis='both', which='major', labelsize=10)
     
     plt.tight_layout()
-    return fig 
+    return fig
 
 
-def create_mean_range_combined_plot(folder_data, figsize=(10, 12)):
+def create_mean_range_combined_plot(folder_data, figsize=(10, 10)):
     """
+    평균 및 범위 비교를 위아래 구성으로 보여주는 결합 그래프 생성
     Create a combined plot showing mean and range comparisons in up-down configuration.
     
     Args:
-        folder_data (dict): Dictionary with file_id as key and (data, stats, filename) as value
-        figsize (tuple): Figure size
+        folder_data (dict): 파일 ID를 키로 하고 (data, stats, filename)를 값으로 하는 딕셔너리
+                           Dictionary with file_id as key and (data, stats, filename) as value
+        figsize (tuple): 그래프 크기 / Figure size
         
     Returns:
-        matplotlib.figure.Figure: The created figure
+        matplotlib.figure.Figure: 생성된 그래프 / The created figure
     """
-    # Keep original page size, but make plots smaller (0.45 height)
-    width, height = figsize
-    plot_height = height * 0.45
-    
     fig = plt.figure(figsize=figsize)
     fig.suptitle('Statistical Comparison - Mean and Range', fontsize=16, fontweight='bold')
     
-    # Create two subplots in the upper half of the page
+    # 두 개의 서브플롯 생성 / Create two subplots
     ax1 = plt.subplot(2, 1, 1)
     ax2 = plt.subplot(2, 1, 2)
-    
-    # Adjust the position to use only the upper half with proper spacing
-    ax1.set_position([0.1, 0.6, 0.8, 0.3])   # [left, bottom, width, height]
-    ax2.set_position([0.1, 0.15, 0.8, 0.3])  # [left, bottom, width, height]
     
     # Simplify file IDs to just numbers
     file_ids = list(folder_data.keys())
@@ -482,8 +552,10 @@ def create_mean_range_combined_plot(folder_data, figsize=(10, 12)):
     ax1.set_xlabel('Files', fontsize=12)
     ax1.set_ylabel('Mean Warpage Value', fontsize=12)
     ax1.set_title('Mean Warpage Values with Standard Deviation', fontsize=14, fontweight='bold')
-    ax1.set_xticks(x_pos)
-    ax1.set_xticklabels(simple_file_ids, rotation=45, ha='right', fontsize=10)
+    # Use smart x-axis tick selection for readability
+    selected_x_pos, selected_labels = get_readable_x_axis_ticks(x_pos, simple_file_ids)
+    ax1.set_xticks(selected_x_pos)
+    ax1.set_xticklabels(selected_labels, rotation=45, ha='right', fontsize=10)
     ax1.grid(True, alpha=0.3)
     ax1.tick_params(axis='both', which='major', labelsize=10)
     
@@ -493,8 +565,10 @@ def create_mean_range_combined_plot(folder_data, figsize=(10, 12)):
     ax2.set_xlabel('Files', fontsize=12)
     ax2.set_ylabel('Warpage Range', fontsize=12)
     ax2.set_title('Warpage Range Comparison', fontsize=14, fontweight='bold')
-    ax2.set_xticks(x_pos)
-    ax2.set_xticklabels(simple_file_ids, rotation=45, ha='right', fontsize=10)
+    # Use smart x-axis tick selection for readability
+    selected_x_pos, selected_labels = get_readable_x_axis_ticks(x_pos, simple_file_ids)
+    ax2.set_xticks(selected_x_pos)
+    ax2.set_xticklabels(selected_labels, rotation=45, ha='right', fontsize=10)
     ax2.grid(True, alpha=0.3)
     ax2.tick_params(axis='both', which='major', labelsize=10)
     
@@ -502,31 +576,25 @@ def create_mean_range_combined_plot(folder_data, figsize=(10, 12)):
     return fig
 
 
-def create_minmax_std_combined_plot(folder_data, figsize=(10, 12)):
+def create_minmax_std_combined_plot(folder_data, figsize=(10, 10)):
     """
+    최소-최대 및 표준편차 비교를 위아래 구성으로 보여주는 결합 그래프 생성
     Create a combined plot showing min-max and standard deviation comparisons in up-down configuration.
     
     Args:
-        folder_data (dict): Dictionary with file_id as key and (data, stats, filename) as value
-        figsize (tuple): Figure size
+        folder_data (dict): 파일 ID를 키로 하고 (data, stats, filename)를 값으로 하는 딕셔너리
+                           Dictionary with file_id as key and (data, stats, filename) as value
+        figsize (tuple): 그래프 크기 / Figure size
         
     Returns:
-        matplotlib.figure.Figure: The created figure
+        matplotlib.figure.Figure: 생성된 그래프 / The created figure
     """
-    # Keep original page size, but make plots smaller (0.45 height)
-    width, height = figsize
-    plot_height = height * 0.45
-    
     fig = plt.figure(figsize=figsize)
     fig.suptitle('Statistical Comparison - Min-Max and Standard Deviation', fontsize=16, fontweight='bold')
     
-    # Create two subplots in the upper half of the page
+    # 두 개의 서브플롯 생성 / Create two subplots
     ax1 = plt.subplot(2, 1, 1)
     ax2 = plt.subplot(2, 1, 2)
-    
-    # Adjust the position to use only the upper half with proper spacing
-    ax1.set_position([0.1, 0.6, 0.8, 0.3])   # [left, bottom, width, height]
-    ax2.set_position([0.1, 0.15, 0.8, 0.3])  # [left, bottom, width, height]
     
     # Simplify file IDs to just numbers
     file_ids = list(folder_data.keys())
@@ -544,8 +612,10 @@ def create_minmax_std_combined_plot(folder_data, figsize=(10, 12)):
     ax1.set_xlabel('Files', fontsize=12)
     ax1.set_ylabel('Warpage Value', fontsize=12)
     ax1.set_title('Min-Max Warpage Values', fontsize=14, fontweight='bold')
-    ax1.set_xticks(x_pos)
-    ax1.set_xticklabels(simple_file_ids, rotation=45, ha='right', fontsize=10)
+    # Use smart x-axis tick selection for readability
+    selected_x_pos, selected_labels = get_readable_x_axis_ticks(x_pos, simple_file_ids)
+    ax1.set_xticks(selected_x_pos)
+    ax1.set_xticklabels(selected_labels, rotation=45, ha='right', fontsize=10)
     ax1.legend(fontsize=10)
     ax1.grid(True, alpha=0.3)
     ax1.tick_params(axis='both', which='major', labelsize=10)
@@ -556,13 +626,15 @@ def create_minmax_std_combined_plot(folder_data, figsize=(10, 12)):
     ax2.set_xlabel('Files', fontsize=12)
     ax2.set_ylabel('Standard Deviation', fontsize=12)
     ax2.set_title('Standard Deviation Comparison', fontsize=14, fontweight='bold')
-    ax2.set_xticks(x_pos)
-    ax2.set_xticklabels(simple_file_ids, rotation=45, ha='right', fontsize=10)
+    # Use smart x-axis tick selection for readability
+    selected_x_pos, selected_labels = get_readable_x_axis_ticks(x_pos, simple_file_ids)
+    ax2.set_xticks(selected_x_pos)
+    ax2.set_xticklabels(selected_labels, rotation=45, ha='right', fontsize=10)
     ax2.grid(True, alpha=0.3)
     ax2.tick_params(axis='both', which='major', labelsize=10)
     
     plt.tight_layout()
-    return fig 
+    return fig
 
 
 def create_web_gui_statistical_plots(folder_data, figsize=(12, 16)):
@@ -595,8 +667,10 @@ def create_web_gui_statistical_plots(folder_data, figsize=(12, 16)):
     ax1.set_xlabel('Files', fontsize=12)
     ax1.set_ylabel('Mean Warpage Value', fontsize=12)
     ax1.set_title('Mean Warpage Values with Standard Deviation', fontsize=14, fontweight='bold')
-    ax1.set_xticks(x_pos)
-    ax1.set_xticklabels(simple_file_ids, rotation=45, ha='right', fontsize=10)
+    # Use smart x-axis tick selection for readability
+    selected_x_pos, selected_labels = get_readable_x_axis_ticks(x_pos, simple_file_ids)
+    ax1.set_xticks(selected_x_pos)
+    ax1.set_xticklabels(selected_labels, rotation=45, ha='right', fontsize=10)
     ax1.grid(True, alpha=0.3)
     ax1.tick_params(axis='both', which='major', labelsize=10)
     
@@ -607,8 +681,10 @@ def create_web_gui_statistical_plots(folder_data, figsize=(12, 16)):
     ax2.set_xlabel('Files', fontsize=12)
     ax2.set_ylabel('Warpage Range', fontsize=12)
     ax2.set_title('Warpage Range Comparison', fontsize=14, fontweight='bold')
-    ax2.set_xticks(x_pos)
-    ax2.set_xticklabels(simple_file_ids, rotation=45, ha='right', fontsize=10)
+    # Use smart x-axis tick selection for readability
+    selected_x_pos, selected_labels = get_readable_x_axis_ticks(x_pos, simple_file_ids)
+    ax2.set_xticks(selected_x_pos)
+    ax2.set_xticklabels(selected_labels, rotation=45, ha='right', fontsize=10)
     ax2.grid(True, alpha=0.3)
     ax2.tick_params(axis='both', which='major', labelsize=10)
     
@@ -623,11 +699,13 @@ def create_web_gui_statistical_plots(folder_data, figsize=(12, 16)):
     ax3.set_xlabel('Files', fontsize=12)
     ax3.set_ylabel('Warpage Value', fontsize=12)
     ax3.set_title('Min-Max Warpage Values', fontsize=14, fontweight='bold')
-    ax3.set_xticks(x_pos)
-    ax3.set_xticklabels(simple_file_ids, rotation=45, ha='right', fontsize=10)
+    # Use smart x-axis tick selection for readability
+    selected_x_pos, selected_labels = get_readable_x_axis_ticks(x_pos, simple_file_ids)
+    ax3.set_xticks(selected_x_pos)
+    ax3.set_xticklabels(selected_labels, rotation=45, ha='right', fontsize=10)
     ax3.legend(fontsize=10)
     ax3.grid(True, alpha=0.3)
     ax3.tick_params(axis='both', which='major', labelsize=10)
     
     plt.tight_layout()
-    return fig 
+    return fig

@@ -112,6 +112,47 @@
                                 </div>
                             </div>
 
+                            <!-- Color Scale Controls -->
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="autoScale" checked>
+                                    <label class="form-check-label" for="autoScale">
+                                        Use automatic color scaling
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="row" id="colorScaleInputs">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="vmin" class="form-label">Color Scale Min (vmin)</label>
+                                        <input type="number" class="form-control" id="vmin" placeholder="Auto" step="any" disabled>
+                                        <small class="form-text text-muted">Leave empty for auto-scaling</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="vmax" class="form-label">Color Scale Max (vmax)</label>
+                                        <input type="number" class="form-control" id="vmax" placeholder="Auto" step="any" disabled>
+                                        <small class="form-text text-muted">Leave empty for auto-scaling</small>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Quick preset buttons -->
+                            <div class="mb-3" id="colorScalePresets" style="display: none;">
+                                <label class="form-label">Quick Presets:</label>
+                                <div class="btn-group-sm" role="group">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="setSymmetricRange()">
+                                        Symmetric ±
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="clearColorScale()">
+                                        Clear
+                                    </button>
+                                </div>
+                                <small class="form-text text-muted d-block mt-1">Symmetric: Sets equal positive/negative range</small>
+                            </div>
+
                             <button type="submit" class="btn btn-custom btn-lg w-100">
                                 <i class="fas fa-play"></i> Run Analysis
                             </button>
@@ -189,7 +230,27 @@
                                 <p id="summaryFileType">-</p>
                             </div>
                         </div>
+                        <div class="row mt-2">
+                            <div class="col-md-6">
+                                <h6>Color Scale</h6>
+                                <p id="summaryColorScale">-</p>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Analysis Settings</h6>
+                                <p id="summarySettings">-</p>
+                            </div>
+                        </div>
                     </div>
+                </div>
+
+                <!-- Show All Plots Button -->
+                <div class="text-center mb-3" id="showAllPlotsButton" style="display: none;">
+                    <button class="btn btn-primary btn-lg" onclick="showAllPlots()">
+                        <i class="fas fa-images"></i> Show All Plots in One Click
+                    </button>
+                    <button class="btn btn-outline-secondary btn-lg ms-2" onclick="showTabView()">
+                        <i class="fas fa-tabs"></i> Tab View
+                    </button>
                 </div>
 
                 <!-- Navigation Tabs -->
@@ -200,11 +261,53 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link" id="comparison-tab" data-bs-toggle="tab" href="#comparison">
+                            <i class="fas fa-columns"></i> Comparison
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" id="3d-tab" data-bs-toggle="tab" href="#threed">
+                            <i class="fas fa-cube"></i> 3D Surface
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" id="statistics-tab" data-bs-toggle="tab" href="#statistics">
                             <i class="fas fa-chart-pie"></i> Statistical Analysis
                         </a>
                     </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button">
+                            <i class="fas fa-chart-bar"></i> Individual Stats
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" id="mean-tab" data-bs-toggle="tab" href="#mean">Mean Analysis</a></li>
+                            <li><a class="dropdown-item" id="range-tab" data-bs-toggle="tab" href="#range">Range Analysis</a></li>
+                            <li><a class="dropdown-item" id="minmax-tab" data-bs-toggle="tab" href="#minmax">Min-Max Analysis</a></li>
+                            <li><a class="dropdown-item" id="std-tab" data-bs-toggle="tab" href="#std">Std Deviation</a></li>
+                        </ul>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" id="distribution-tab" data-bs-toggle="tab" href="#distribution">
+                            <i class="fas fa-chart-line"></i> Distribution
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" id="advanced-tab" data-bs-toggle="tab" href="#advanced">
+                            <i class="fas fa-cogs"></i> Advanced Analysis
+                        </a>
+                    </li>
                 </ul>
+
+                <!-- All Plots Content (hidden by default) -->
+                <div id="allPlotsContent" style="display: none;">
+                    <div class="text-center mb-3">
+                        <h3>Complete Analysis Report</h3>
+                        <p class="text-muted">All visualizations generated during analysis</p>
+                    </div>
+                    <div id="allPlotsContainer">
+                        <!-- All plots will be loaded here -->
+                    </div>
+                </div>
 
                 <!-- Tab Content -->
                 <div class="tab-content mt-3" id="resultsContent">
@@ -215,10 +318,66 @@
                         </div>
                     </div>
 
+                    <!-- Comparison Plot Tab -->
+                    <div class="tab-pane fade" id="comparison">
+                        <div id="comparisonPlot" class="text-center">
+                            <!-- Comparison plot will be loaded here -->
+                        </div>
+                    </div>
+
+                    <!-- 3D Surface Plots Tab -->
+                    <div class="tab-pane fade" id="threed">
+                        <div id="threedPlot" class="text-center">
+                            <!-- 3D surface plots will be loaded here -->
+                        </div>
+                    </div>
+
                     <!-- Statistics Tab -->
                     <div class="tab-pane fade" id="statistics">
                         <div id="statisticsPlot" class="text-center">
                             <!-- Statistical plot will be loaded here -->
+                        </div>
+                    </div>
+
+                    <!-- Mean Analysis Tab -->
+                    <div class="tab-pane fade" id="mean">
+                        <div id="meanPlot" class="text-center">
+                            <!-- Mean analysis plot will be loaded here -->
+                        </div>
+                    </div>
+
+                    <!-- Range Analysis Tab -->
+                    <div class="tab-pane fade" id="range">
+                        <div id="rangePlot" class="text-center">
+                            <!-- Range analysis plot will be loaded here -->
+                        </div>
+                    </div>
+
+                    <!-- Min-Max Analysis Tab -->
+                    <div class="tab-pane fade" id="minmax">
+                        <div id="minmaxPlot" class="text-center">
+                            <!-- Min-max analysis plot will be loaded here -->
+                        </div>
+                    </div>
+
+                    <!-- Std Deviation Tab -->
+                    <div class="tab-pane fade" id="std">
+                        <div id="stdPlot" class="text-center">
+                            <!-- Standard deviation plot will be loaded here -->
+                        </div>
+                    </div>
+
+                    <!-- Distribution Tab -->
+                    <div class="tab-pane fade" id="distribution">
+                        <div id="distributionPlot" class="text-center">
+                            <!-- Distribution plot will be loaded here -->
+                        </div>
+                    </div>
+
+                    <!-- Advanced Analysis Tab -->
+                    <div class="tab-pane fade" id="advanced">
+                        <div id="advancedPlots" class="text-center">
+                            <!-- Advanced analysis plots will be loaded here -->
                         </div>
                     </div>
                 </div>
@@ -237,7 +396,44 @@
         // Load folders on page load
         document.addEventListener('DOMContentLoaded', function() {
             loadFolders();
+            setupColorScaleControls();
         });
+
+        // Setup color scale controls
+        function setupColorScaleControls() {
+            const autoScaleCheckbox = document.getElementById('autoScale');
+            const vminInput = document.getElementById('vmin');
+            const vmaxInput = document.getElementById('vmax');
+            const presetsDiv = document.getElementById('colorScalePresets');
+
+            autoScaleCheckbox.addEventListener('change', function() {
+                const isAutoScale = this.checked;
+                vminInput.disabled = isAutoScale;
+                vmaxInput.disabled = isAutoScale;
+                presetsDiv.style.display = isAutoScale ? 'none' : 'block';
+                
+                if (isAutoScale) {
+                    vminInput.value = '';
+                    vmaxInput.value = '';
+                }
+            });
+        }
+
+        // Clear color scale inputs
+        function clearColorScale() {
+            document.getElementById('vmin').value = '';
+            document.getElementById('vmax').value = '';
+        }
+
+        // Set symmetric range (requires user to input a value)
+        function setSymmetricRange() {
+            const maxValue = prompt('Enter the maximum absolute value for symmetric range (e.g., 1000):');
+            if (maxValue && !isNaN(maxValue)) {
+                const absValue = Math.abs(parseFloat(maxValue));
+                document.getElementById('vmin').value = -absValue;
+                document.getElementById('vmax').value = absValue;
+            }
+        }
 
         // Load available folders
         async function loadFolders() {
@@ -272,9 +468,18 @@
             const fileType = document.querySelector('input[name="fileType"]:checked').value;
             const rowFraction = parseFloat(document.getElementById('rowFraction').value);
             const colFraction = parseFloat(document.getElementById('colFraction').value);
+            const autoScale = document.getElementById('autoScale').checked;
+            const vmin = autoScale ? null : (document.getElementById('vmin').value ? parseFloat(document.getElementById('vmin').value) : null);
+            const vmax = autoScale ? null : (document.getElementById('vmax').value ? parseFloat(document.getElementById('vmax').value) : null);
 
             if (!folder) {
                 showAlert('Please select a folder', 'warning');
+                return;
+            }
+
+            // Validate vmin/vmax if both are provided
+            if (vmin !== null && vmax !== null && vmin >= vmax) {
+                showAlert('Color scale minimum must be less than maximum', 'warning');
                 return;
             }
 
@@ -300,7 +505,9 @@
                         folder: folder,
                         use_original: fileType === 'original',
                         row_fraction: rowFraction,
-                        col_fraction: colFraction
+                        col_fraction: colFraction,
+                        vmin: vmin,
+                        vmax: vmax
                     })
                 });
 
@@ -329,8 +536,26 @@
                     document.getElementById('summaryDataPoints').textContent = data.summary.total_data_points.toLocaleString();
                     document.getElementById('summaryFileType').textContent = fileType === 'original' ? 'Original Files' : 'Corrected Files';
                     
+                    // Update color scale info
+                    let colorScaleText;
+                    if (vmin === null && vmax === null) {
+                        colorScaleText = 'Automatic';
+                    } else if (vmin !== null && vmax !== null) {
+                        colorScaleText = `${vmin} to ${vmax}`;
+                    } else if (vmin !== null) {
+                        colorScaleText = `Min: ${vmin}, Max: Auto`;
+                    } else {
+                        colorScaleText = `Min: Auto, Max: ${vmax}`;
+                    }
+                    document.getElementById('summaryColorScale').textContent = colorScaleText;
+                    
+                    // Update settings info
+                    const settingsText = `Rows: ${(rowFraction * 100).toFixed(0)}%, Cols: ${(colFraction * 100).toFixed(0)}%`;
+                    document.getElementById('summarySettings').textContent = settingsText;
+                    
                     // Show results
                     document.getElementById('analysisSummary').style.display = 'block';
+                    document.getElementById('showAllPlotsButton').style.display = 'block';
                     document.getElementById('resultsTabs').style.display = 'block';
                     document.getElementById('exportCard').style.display = 'block';
                     
@@ -417,6 +642,207 @@
             } catch (error) {
                 console.error('Error loading statistical plot:', error);
                 container.innerHTML = '<div class="alert alert-danger">Error loading statistical plot</div>';
+            }
+        });
+
+        // Load comparison plot
+        document.getElementById('comparison-tab').addEventListener('click', async function() {
+            const container = document.getElementById('comparisonPlot');
+            container.innerHTML = '<div class="text-center"><div class="spinner-border"></div><p>Loading comparison plot...</p></div>';
+
+            try {
+                const response = await fetch('/api/comparison_plot');
+                const data = await response.json();
+                
+                if (data.success) {
+                    container.innerHTML = `
+                        <div class="plot-container">
+                            <h5>Side-by-Side Comparison</h5>
+                            <img src="data:image/png;base64,${data.image}" class="plot-image" alt="Comparison plot">
+                        </div>
+                    `;
+                } else {
+                    container.innerHTML = '<div class="alert alert-danger">Error loading comparison plot</div>';
+                }
+            } catch (error) {
+                console.error('Error loading comparison plot:', error);
+                container.innerHTML = '<div class="alert alert-danger">Error loading comparison plot</div>';
+            }
+        });
+
+        // Load 3D surface plot
+        document.getElementById('3d-tab').addEventListener('click', async function() {
+            const container = document.getElementById('threedPlot');
+            container.innerHTML = '<div class="text-center"><div class="spinner-border"></div><p>Loading 3D surface plots...</p></div>';
+
+            try {
+                const response = await fetch('/api/3d_plot');
+                const data = await response.json();
+                
+                if (data.success) {
+                    container.innerHTML = `
+                        <div class="plot-container">
+                            <h5>3D Surface Plots</h5>
+                            <img src="data:image/png;base64,${data.image}" class="plot-image" alt="3D surface plots">
+                        </div>
+                    `;
+                } else {
+                    container.innerHTML = '<div class="alert alert-danger">Error loading 3D plots</div>';
+                }
+            } catch (error) {
+                console.error('Error loading 3D plots:', error);
+                container.innerHTML = '<div class="alert alert-danger">Error loading 3D plots</div>';
+            }
+        });
+
+        // Load mean analysis plot
+        document.getElementById('mean-tab').addEventListener('click', async function() {
+            const container = document.getElementById('meanPlot');
+            container.innerHTML = '<div class="text-center"><div class="spinner-border"></div><p>Loading mean analysis...</p></div>';
+
+            try {
+                const response = await fetch('/api/mean_plot');
+                const data = await response.json();
+                
+                if (data.success) {
+                    container.innerHTML = `
+                        <div class="plot-container">
+                            <h5>Mean Warpage Analysis</h5>
+                            <img src="data:image/png;base64,${data.image}" class="plot-image" alt="Mean analysis">
+                        </div>
+                    `;
+                } else {
+                    container.innerHTML = '<div class="alert alert-danger">Error loading mean plot</div>';
+                }
+            } catch (error) {
+                console.error('Error loading mean plot:', error);
+                container.innerHTML = '<div class="alert alert-danger">Error loading mean plot</div>';
+            }
+        });
+
+        // Load range analysis plot
+        document.getElementById('range-tab').addEventListener('click', async function() {
+            const container = document.getElementById('rangePlot');
+            container.innerHTML = '<div class="text-center"><div class="spinner-border"></div><p>Loading range analysis...</p></div>';
+
+            try {
+                const response = await fetch('/api/range_plot');
+                const data = await response.json();
+                
+                if (data.success) {
+                    container.innerHTML = `
+                        <div class="plot-container">
+                            <h5>Warpage Range Analysis</h5>
+                            <img src="data:image/png;base64,${data.image}" class="plot-image" alt="Range analysis">
+                        </div>
+                    `;
+                } else {
+                    container.innerHTML = '<div class="alert alert-danger">Error loading range plot</div>';
+                }
+            } catch (error) {
+                console.error('Error loading range plot:', error);
+                container.innerHTML = '<div class="alert alert-danger">Error loading range plot</div>';
+            }
+        });
+
+        // Load min-max analysis plot
+        document.getElementById('minmax-tab').addEventListener('click', async function() {
+            const container = document.getElementById('minmaxPlot');
+            container.innerHTML = '<div class="text-center"><div class="spinner-border"></div><p>Loading min-max analysis...</p></div>';
+
+            try {
+                const response = await fetch('/api/minmax_plot');
+                const data = await response.json();
+                
+                if (data.success) {
+                    container.innerHTML = `
+                        <div class="plot-container">
+                            <h5>Min-Max Warpage Analysis</h5>
+                            <img src="data:image/png;base64,${data.image}" class="plot-image" alt="Min-max analysis">
+                        </div>
+                    `;
+                } else {
+                    container.innerHTML = '<div class="alert alert-danger">Error loading min-max plot</div>';
+                }
+            } catch (error) {
+                console.error('Error loading min-max plot:', error);
+                container.innerHTML = '<div class="alert alert-danger">Error loading min-max plot</div>';
+            }
+        });
+
+        // Load standard deviation plot
+        document.getElementById('std-tab').addEventListener('click', async function() {
+            const container = document.getElementById('stdPlot');
+            container.innerHTML = '<div class="text-center"><div class="spinner-border"></div><p>Loading standard deviation analysis...</p></div>';
+
+            try {
+                const response = await fetch('/api/std_plot');
+                const data = await response.json();
+                
+                if (data.success) {
+                    container.innerHTML = `
+                        <div class="plot-container">
+                            <h5>Standard Deviation Analysis</h5>
+                            <img src="data:image/png;base64,${data.image}" class="plot-image" alt="Standard deviation analysis">
+                        </div>
+                    `;
+                } else {
+                    container.innerHTML = '<div class="alert alert-danger">Error loading std plot</div>';
+                }
+            } catch (error) {
+                console.error('Error loading std plot:', error);
+                container.innerHTML = '<div class="alert alert-danger">Error loading std plot</div>';
+            }
+        });
+
+        // Load distribution plot
+        document.getElementById('distribution-tab').addEventListener('click', async function() {
+            const container = document.getElementById('distributionPlot');
+            container.innerHTML = '<div class="text-center"><div class="spinner-border"></div><p>Loading distribution analysis...</p></div>';
+
+            try {
+                const response = await fetch('/api/distribution_plot');
+                const data = await response.json();
+                
+                if (data.success) {
+                    container.innerHTML = `
+                        <div class="plot-container">
+                            <h5>Warpage Distribution Analysis</h5>
+                            <img src="data:image/png;base64,${data.image}" class="plot-image" alt="Distribution analysis">
+                        </div>
+                    `;
+                } else {
+                    container.innerHTML = '<div class="alert alert-danger">Error loading distribution plot</div>';
+                }
+            } catch (error) {
+                console.error('Error loading distribution plot:', error);
+                container.innerHTML = '<div class="alert alert-danger">Error loading distribution plot</div>';
+            }
+        });
+
+        // Load advanced analysis plots
+        document.getElementById('advanced-tab').addEventListener('click', async function() {
+            const container = document.getElementById('advancedPlots');
+            container.innerHTML = '<div class="text-center"><div class="spinner-border"></div><p>Loading advanced analysis...</p></div>';
+
+            try {
+                const response = await fetch('/api/advanced_analysis');
+                const data = await response.json();
+                
+                if (data.success && data.plots && data.plots.length > 0) {
+                    const plotsHTML = data.plots.map(plot => `
+                        <div class="plot-container mb-4">
+                            <h5>${plot.title}</h5>
+                            <img src="data:image/png;base64,${plot.image}" class="plot-image" alt="${plot.title}">
+                        </div>
+                    `).join('');
+                    container.innerHTML = plotsHTML;
+                } else {
+                    container.innerHTML = '<div class="alert alert-info">No advanced analysis plots available</div>';
+                }
+            } catch (error) {
+                console.error('Error loading advanced analysis:', error);
+                container.innerHTML = '<div class="alert alert-danger">Error loading advanced analysis</div>';
             }
         });
 
@@ -516,6 +942,173 @@
                     alertDiv.parentNode.removeChild(alertDiv);
                 }
             }, 5000);
+        }
+        // Show all plots in one view
+        async function showAllPlots() {
+            const container = document.getElementById('allPlotsContainer');
+            container.innerHTML = '<div class="text-center"><div class="spinner-border"></div><p>Loading all plots...</p></div>';
+            
+            // Hide tab view and show all plots view
+            document.getElementById('resultsContent').style.display = 'none';
+            document.getElementById('resultsTabs').style.display = 'none';
+            document.getElementById('allPlotsContent').style.display = 'block';
+            
+            try {
+                const response = await fetch('/api/all_plots');
+                const data = await response.json();
+                
+                if (data.success) {
+                    let html = '';
+                    
+                    // Individual plots section
+                    html += '<div class="row mb-5"><div class="col-12"><h4><i class="fas fa-chart-area"></i> Individual File Analysis</h4></div></div>';
+                    html += '<div class="row">';
+                    data.plots.individual.forEach(plot => {
+                        html += `
+                            <div class="col-md-6 mb-4">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h6>${plot.file_id} - ${plot.filename}</h6>
+                                        <small class="text-muted">Shape: ${plot.stats.shape[0]}×${plot.stats.shape[1]} | Mean: ${plot.stats.mean.toFixed(2)} | Range: ${plot.stats.range.toFixed(2)}</small>
+                                    </div>
+                                    <div class="card-body">
+                                        <img src="data:image/png;base64,${plot.image}" class="img-fluid" alt="${plot.filename}">
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    html += '</div>';
+                    
+                    // Comparison plot section
+                    html += '<div class="row mb-5"><div class="col-12"><h4><i class="fas fa-columns"></i> Side-by-Side Comparison</h4></div></div>';
+                    html += `
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-body">
+                                        <img src="data:image/png;base64,${data.plots.comparison}" class="img-fluid" alt="Comparison Plot">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    // 3D surface plots section
+                    html += '<div class="row mb-5"><div class="col-12"><h4><i class="fas fa-cube"></i> 3D Surface Visualization</h4></div></div>';
+                    html += `
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-body">
+                                        <img src="data:image/png;base64,${data.plots['3d']}" class="img-fluid" alt="3D Surface Plots">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    // Statistical analysis section
+                    html += '<div class="row mb-5"><div class="col-12"><h4><i class="fas fa-chart-pie"></i> Statistical Analysis</h4></div></div>';
+                    html += `
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-body">
+                                        <img src="data:image/png;base64,${data.plots.statistics}" class="img-fluid" alt="Statistical Analysis">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    // Individual statistical plots section
+                    html += '<div class="row mb-5"><div class="col-12"><h4><i class="fas fa-chart-bar"></i> Individual Statistical Metrics</h4></div></div>';
+                    html += '<div class="row">';
+                    html += `
+                        <div class="col-md-6 mb-4">
+                            <div class="card">
+                                <div class="card-header"><h6>Mean Analysis</h6></div>
+                                <div class="card-body">
+                                    <img src="data:image/png;base64,${data.plots.mean}" class="img-fluid" alt="Mean Analysis">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-4">
+                            <div class="card">
+                                <div class="card-header"><h6>Range Analysis</h6></div>
+                                <div class="card-body">
+                                    <img src="data:image/png;base64,${data.plots.range}" class="img-fluid" alt="Range Analysis">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-4">
+                            <div class="card">
+                                <div class="card-header"><h6>Min-Max Analysis</h6></div>
+                                <div class="card-body">
+                                    <img src="data:image/png;base64,${data.plots.minmax}" class="img-fluid" alt="Min-Max Analysis">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-4">
+                            <div class="card">
+                                <div class="card-header"><h6>Standard Deviation Analysis</h6></div>
+                                <div class="card-body">
+                                    <img src="data:image/png;base64,${data.plots.std}" class="img-fluid" alt="Standard Deviation">
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    html += '</div>';
+                    
+                    // Distribution analysis section
+                    html += '<div class="row mb-5"><div class="col-12"><h4><i class="fas fa-chart-line"></i> Distribution Analysis</h4></div></div>';
+                    html += `
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-body">
+                                        <img src="data:image/png;base64,${data.plots.distribution}" class="img-fluid" alt="Distribution Analysis">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    // Advanced analysis section
+                    if (data.plots.advanced && data.plots.advanced.length > 0) {
+                        html += '<div class="row mb-5"><div class="col-12"><h4><i class="fas fa-cogs"></i> Advanced Statistical Analysis</h4></div></div>';
+                        data.plots.advanced.forEach(plot => {
+                            html += `
+                                <div class="row mb-4">
+                                    <div class="col-12">
+                                        <div class="card">
+                                            <div class="card-header"><h6>${plot.title}</h6></div>
+                                            <div class="card-body">
+                                                <img src="data:image/png;base64,${plot.image}" class="img-fluid" alt="${plot.title}">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        });
+                    }
+                    
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = '<div class="alert alert-danger">Error loading plots</div>';
+                }
+            } catch (error) {
+                console.error('Error loading all plots:', error);
+                container.innerHTML = '<div class="alert alert-danger">Error loading plots</div>';
+            }
+        }
+
+        // Show tab view
+        function showTabView() {
+            document.getElementById('allPlotsContent').style.display = 'none';
+            document.getElementById('resultsContent').style.display = 'block';
+            document.getElementById('resultsTabs').style.display = 'block';
         }
     </script>
 </body>

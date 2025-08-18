@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(rmdir:*)",
+      "Bash(rm:*)",
+      "Bash(python:*)",
+      "Bash(timeout:*)",
+      "Bash(mv:*)",
+      "Bash(pip install:*)",
+      "Bash(del *.pdf)"
+    ],
+    "deny": []
+  }
+}
