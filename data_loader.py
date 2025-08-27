@@ -44,11 +44,21 @@ def load_data_from_file(file_path):
         data_array = data_array[:, nonzero_col_mask]
         print(f"  After removing zero columns: {data_array.shape}")
         
-        # -4000 값을 아티팩트로 간주하여 NaN으로 변환 / Nullify -4000 values as artifacts
-        artifact_count = np.sum(data_array == -4000)
-        data_array = np.where(data_array == -4000, np.nan, data_array)
-        if artifact_count > 0:
-            print(f"  Nullified {artifact_count} -4000 artifacts")
+        # 아티팩트 값들을 NaN으로 변환 / Nullify artifact values as NaN
+        invalid_values = [-4000, 9999.0, -9999.0, 99999.0, -99999.0]
+        artifact_counts = {}
+        total_artifacts = 0
+        
+        for invalid_val in invalid_values:
+            count = np.sum(data_array == invalid_val)
+            if count > 0:
+                data_array = np.where(data_array == invalid_val, np.nan, data_array)
+                artifact_counts[invalid_val] = count
+                total_artifacts += count
+        
+        if total_artifacts > 0:
+            artifact_details = ", ".join([f"{count} ({val})" for val, count in artifact_counts.items()])
+            print(f"  Nullified {total_artifacts} artifacts: {artifact_details}")
         
         print(f"  Final array shape: {data_array.shape}")
         return data_array
@@ -225,4 +235,204 @@ def get_file_size(file_path):
     elif size_bytes < 1024 * 1024 * 1024:
         return f"{size_bytes / (1024 * 1024):.2f} MB"
     else:
-        return f"{size_bytes / (1024 * 1024 * 1024):.2f} GB" 
+        return f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
+
+
+# ===========================================
+# BATCH PROCESSING FUNCTIONS
+# ===========================================
+
+def process_batch_files(file_paths, row_fraction=1.0, col_fraction=1.0):
+    """
+    Process multiple files in batch with parallel processing support.
+    
+    Args:
+        file_paths (list): List of file paths to process
+        row_fraction (float): Fraction of rows to keep in center region
+        col_fraction (float): Fraction of columns to keep in center region
+        
+    Returns:
+        dict: Processed data with file_id as key and (data, stats, filename) as value
+    """
+    from warpage_statistics import calculate_statistics
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import threading
+    
+    print(f"Starting batch processing of {len(file_paths)} files...")
+    
+    # Thread-safe progress tracking
+    progress_lock = threading.Lock()
+    processed_count = [0]  # Use list for mutable reference
+    
+    def process_single_file(file_path):
+        """Process a single file and return results"""
+        try:
+            filename = os.path.basename(file_path)
+            
+            # Load raw data
+            raw_data = load_data_from_file(file_path)
+            if raw_data is None:
+                print(f"    ⚠ Skipped {filename} (load failed)")
+                return None
+            
+            # Extract center region if needed
+            if row_fraction != 1 or col_fraction != 1:
+                center_data = extract_center_region(raw_data, row_fraction, col_fraction)
+            else:
+                center_data = raw_data
+            
+            # Calculate statistics
+            stats = calculate_statistics(center_data)
+            
+            # Update progress
+            with progress_lock:
+                processed_count[0] += 1
+                print(f"    Progress: {processed_count[0]}/{len(file_paths)} - Processed {filename}")
+            
+            return (filename, center_data, stats)
+            
+        except Exception as e:
+            print(f"    ERROR processing {os.path.basename(file_path)}: {e}")
+            return None
+    
+    # Process files in parallel
+    folder_data = {}
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        # Submit all tasks
+        future_to_path = {executor.submit(process_single_file, path): path for path in file_paths}
+        
+        # Collect results as they complete
+        for future in as_completed(future_to_path):
+            result = future.result()
+            if result:
+                filename, data, stats = result
+                # Create unique file ID
+                file_id = f"File_{len(folder_data) + 1:02d}"
+                folder_data[file_id] = (data, stats, filename)
+    
+    print(f"Batch processing completed: {len(folder_data)} files successfully processed")
+    return folder_data
+
+
+def validate_batch_files(file_paths):
+    """
+    Validate batch files before processing.
+    
+    Args:
+        file_paths (list): List of file paths to validate
+        
+    Returns:
+        dict: Validation results with valid/invalid file lists
+    """
+    valid_files = []
+    invalid_files = []
+    
+    print(f"Validating {len(file_paths)} files...")
+    
+    for file_path in file_paths:
+        filename = os.path.basename(file_path)
+        
+        # Check file existence
+        if not os.path.exists(file_path):
+            invalid_files.append({'path': file_path, 'reason': 'File not found'})
+            continue
+        
+        # Check file extension
+        if not filename.endswith(('.txt', '.ptr')):
+            invalid_files.append({'path': file_path, 'reason': 'Invalid file extension'})
+            continue
+        
+        # Check file size (skip empty files)
+        if os.path.getsize(file_path) == 0:
+            invalid_files.append({'path': file_path, 'reason': 'Empty file'})
+            continue
+        
+        # Try to read a few lines to check format
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                sample_lines = [f.readline().strip() for _ in range(3)]
+                
+            # Basic format validation
+            for line in sample_lines:
+                if line:  # Skip empty lines
+                    try:
+                        # Try to parse numbers
+                        list(map(float, line.split()))
+                    except ValueError:
+                        raise ValueError("Invalid number format")
+                        
+            valid_files.append(file_path)
+            
+        except Exception as e:
+            invalid_files.append({'path': file_path, 'reason': f'Format error: {str(e)}'})
+    
+    print(f"Validation completed: {len(valid_files)} valid, {len(invalid_files)} invalid")
+    
+    return {
+        'valid_files': valid_files,
+        'invalid_files': invalid_files,
+        'total_files': len(file_paths),
+        'valid_count': len(valid_files),
+        'invalid_count': len(invalid_files)
+    }
+
+
+def create_batch_summary(folder_data):
+    """
+    Create a summary of batch processing results.
+    
+    Args:
+        folder_data (dict): Processed batch data
+        
+    Returns:
+        dict: Summary statistics and information
+    """
+    if not folder_data:
+        return {'error': 'No data to summarize'}
+    
+    # Extract all data for global statistics
+    all_means = []
+    all_stds = []
+    all_ranges = []
+    all_mins = []
+    all_maxs = []
+    total_data_points = 0
+    
+    file_details = []
+    
+    for file_id, (data, stats, filename) in folder_data.items():
+        all_means.append(stats['mean'])
+        all_stds.append(stats['std'])
+        all_ranges.append(stats['range'])
+        all_mins.append(stats['min'])
+        all_maxs.append(stats['max'])
+        total_data_points += np.prod(data.shape)
+        
+        file_details.append({
+            'file_id': file_id,
+            'filename': filename,
+            'shape': stats['shape'],
+            'data_points': np.prod(data.shape),
+            'mean': stats['mean'],
+            'std': stats['std'],
+            'min': stats['min'],
+            'max': stats['max'],
+            'range': stats['range']
+        })
+    
+    # Calculate global statistics
+    summary = {
+        'file_count': len(folder_data),
+        'total_data_points': total_data_points,
+        'global_stats': {
+            'mean_of_means': np.mean(all_means),
+            'std_of_means': np.std(all_means),
+            'overall_min': np.min(all_mins),
+            'overall_max': np.max(all_maxs),
+            'mean_range': np.mean(all_ranges),
+            'max_range': np.max(all_ranges)
+        },
+        'file_details': file_details
+    }
+    
+    return summary 

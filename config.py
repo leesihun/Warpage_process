@@ -36,4 +36,35 @@ WEB_DEBUG = True         # 웹 디버그 모드 / Web debug mode
 FILE_PATTERNS = {
     'original': '@_ORI.txt',     # 원본 파일 패턴 / Original files pattern
     'corrected': '@.txt'         # 보정된 파일 패턴 (@_ORI.txt 제외) / Corrected files pattern (excluding @_ORI.txt)
+}
+
+# 배치 처리 설정 / Batch processing settings
+BATCH_CONFIG = {
+    'max_files': 100,              # 최대 배치 파일 수 / Maximum batch file count
+    'max_file_size_mb': 50,        # 파일당 최대 크기 (MB) / Maximum file size per file (MB)
+    'max_total_size_mb': 500,      # 총 최대 크기 (MB) / Maximum total size (MB)
+    'parallel_workers': 4,         # 병렬 처리 워커 수 / Number of parallel workers
+    'supported_extensions': ['.txt', '.ptr'],  # 지원되는 파일 확장자 / Supported file extensions
+    'temp_dir_prefix': 'warpage_batch_'        # 임시 디렉토리 접두사 / Temporary directory prefix
+}
+
+# 인터랙티브 플롯 설정 / Interactive plot settings
+PLOTLY_CONFIG = {
+    'default_colorscale': 'jet',   # 기본 색상맵 / Default colorscale
+    'plot_width': 800,             # 기본 플롯 너비 / Default plot width
+    'plot_height': 600,            # 기본 플롯 높이 / Default plot height
+    'show_toolbar': True,          # 도구막대 표시 / Show toolbar
+    'enable_zoom': True,           # 줌 기능 활성화 / Enable zoom
+    'enable_pan': True,            # 팬 기능 활성화 / Enable pan
+    'enable_select': True,         # 선택 기능 활성화 / Enable select
+    'auto_resize': True,           # 자동 크기 조정 / Auto resize
+    'responsive': True             # 반응형 / Responsive
+}
+
+# 실시간 업데이트 설정 / Real-time update settings
+REALTIME_CONFIG = {
+    'update_delay_ms': 300,        # 업데이트 지연 시간 (밀리초) / Update delay (milliseconds)
+    'debounce_enabled': True,      # 디바운싱 활성화 / Enable debouncing
+    'max_update_frequency': 5,     # 초당 최대 업데이트 횟수 / Maximum updates per second
+    'enable_live_preview': True    # 라이브 프리뷰 활성화 / Enable live preview
 } 

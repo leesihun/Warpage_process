@@ -65,7 +65,7 @@ def calculate_advanced_statistics(data_array):
     }
 
 
-def create_violin_plots(folder_data, figsize=(12, 8)):
+def create_violin_plots(folder_data, figsize=(11.69, 8.27)):
     """
     바이올린 플롯으로 분포 시각화 / Violin plots for distribution visualization
     """
@@ -99,7 +99,7 @@ def create_violin_plots(folder_data, figsize=(12, 8)):
     return fig
 
 
-def create_cdf_plots(folder_data, figsize=(12, 8)):
+def create_cdf_plots(folder_data, figsize=(11.69, 8.27)):
     """
     누적분포함수 플롯 - (최대-최소) 워페이지 범위 기준
     Cumulative Distribution Function plots - Based on (max-min) warpage ranges
@@ -150,38 +150,6 @@ def create_cdf_plots(folder_data, figsize=(12, 8)):
     return fig
 
 
-def create_qq_plots(folder_data, figsize=(15, 10)):
-    """
-    Q-Q 플롯으로 정규분포와 비교 / Q-Q plots comparing against normal distribution
-    """
-    n_files = len(folder_data)
-    n_cols = min(3, n_files)
-    n_rows = (n_files + n_cols - 1) // n_cols
-    
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize)
-    if n_files == 1:
-        axes = [axes]
-    elif n_rows == 1:
-        axes = [axes] if n_files == 1 else axes
-    else:
-        axes = axes.flatten()
-    
-    for i, (file_id, (data, stats, filename)) in enumerate(folder_data.items()):
-        ax = axes[i] if n_files > 1 else axes[0]
-        valid_data = data[~np.isnan(data)].flatten()
-        
-        # Q-Q 플롯 생성 / Create Q-Q plot
-        from scipy import stats as scipy_stats
-        scipy_stats.probplot(valid_data, dist="norm", plot=ax)
-        ax.set_title(f'{file_id.replace("File_", "")} - Q-Q Plot vs Normal', fontweight='bold')
-        ax.grid(True, alpha=0.3)
-    
-    # 빈 서브플롯 숨기기 / Hide empty subplots
-    for j in range(i + 1, len(axes)):
-        axes[j].set_visible(False)
-    
-    plt.tight_layout()
-    return fig
 
 
 def calculate_spatial_gradients(data_array):
@@ -196,7 +164,7 @@ def calculate_spatial_gradients(data_array):
     return grad_x, grad_y, gradient_magnitude
 
 
-def create_gradient_analysis(folder_data, figsize=(8.27, 11.69), vmin=None, vmax=None):
+def create_gradient_analysis(folder_data, figsize=(11.69, 8.27), vmin=None, vmax=None):
     """
     기울기 크기 분석 시각화 (2x2 형식으로 페이지당 4개 파일)
     Gradient magnitude analysis visualization (2x2 format, 4 files per page)
@@ -243,7 +211,7 @@ def create_gradient_analysis(folder_data, figsize=(8.27, 11.69), vmin=None, vmax
     return figures
 
 
-def create_contour_plots(folder_data, figsize=(8.27, 11.69)):
+def create_contour_plots(folder_data, figsize=(11.69, 8.27)):
     """
     등고선 플롯 생성 (2x2 형식으로 페이지당 4개 파일)
     Create contour plots (2x2 format, 4 files per page)
@@ -297,11 +265,11 @@ def create_contour_plots(folder_data, figsize=(8.27, 11.69)):
     return figures
 
 
-def create_cross_sectional_profiles(folder_data, figsize=(12, 8)):
+def create_cross_sectional_profiles(folder_data, figsize=(11.69, 8.27)):
     """
     단면 프로파일 플롯 / Cross-sectional profile plots
     """
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=figsize)
     
     colors = plt.cm.Set1(np.linspace(0, 1, len(folder_data)))
     
@@ -334,7 +302,7 @@ def create_cross_sectional_profiles(folder_data, figsize=(12, 8)):
     return fig
 
 
-def create_percentile_analysis(folder_data, figsize=(12, 8)):
+def create_percentile_analysis(folder_data, figsize=(11.69, 8.27)):
     """
     백분위수 분석 시각화 / Percentile analysis visualization
     """
@@ -379,57 +347,13 @@ def create_percentile_analysis(folder_data, figsize=(12, 8)):
     return fig
 
 
-def create_process_capability_analysis(folder_data, figsize=(12, 8)):
-    """
-    공정 능력 분석 / Process capability analysis
-    """
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
-    
-    file_ids = []
-    cp_values = []
-    cpk_values = []
-    
-    for file_id, (data, stats, filename) in folder_data.items():
-        advanced_stats = calculate_advanced_statistics(data)
-        file_ids.append(file_id.replace('File_', ''))
-        cp_values.append(advanced_stats.get('cp', 0))
-        cpk_values.append(advanced_stats.get('cpk', 0))
-    
-    x_pos = np.arange(len(file_ids))
-    
-    # Cp 값 / Cp values
-    bars1 = ax1.bar(x_pos, cp_values, alpha=0.7, color='skyblue', edgecolor='navy')
-    ax1.axhline(y=1.0, color='red', linestyle='--', label='Minimum Cp=1.0')
-    ax1.axhline(y=1.33, color='green', linestyle='--', label='Good Cp=1.33')
-    ax1.set_xlabel('Files', fontsize=12)
-    ax1.set_ylabel('Cp Value', fontsize=12)
-    ax1.set_title('Process Capability Index (Cp)', fontweight='bold')
-    ax1.set_xticks(x_pos)
-    ax1.set_xticklabels(file_ids)
-    ax1.grid(True, alpha=0.3)
-    ax1.legend()
-    
-    # Cpk 값 / Cpk values
-    bars2 = ax2.bar(x_pos, cpk_values, alpha=0.7, color='lightcoral', edgecolor='darkred')
-    ax2.axhline(y=1.0, color='red', linestyle='--', label='Minimum Cpk=1.0')
-    ax2.axhline(y=1.33, color='green', linestyle='--', label='Good Cpk=1.33')
-    ax2.set_xlabel('Files', fontsize=12)
-    ax2.set_ylabel('Cpk Value', fontsize=12)
-    ax2.set_title('Process Capability Index (Cpk)', fontweight='bold')
-    ax2.set_xticks(x_pos)
-    ax2.set_xticklabels(file_ids)
-    ax2.grid(True, alpha=0.3)
-    ax2.legend()
-    
-    plt.tight_layout()
-    return fig
 
 
-def create_skewness_kurtosis_analysis(folder_data, figsize=(12, 8)):
+def create_skewness_kurtosis_analysis(folder_data, figsize=(8.27, 11.69)):
     """
     왜도와 첨도 분석 / Skewness and kurtosis analysis
     """
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=figsize)
     
     file_ids = []
     skewness_values = []
@@ -478,114 +402,87 @@ def detect_hotspots(data_array, threshold_percentile=95):
     return hotspots, threshold
 
 
-def create_hotspot_analysis(folder_data, figsize=(12, 10), vmin=None, vmax=None):
+def create_hotspot_analysis(folder_data, figsize=(11.69, 8.27), vmin=None, vmax=None):
     """
-    Hotspot analysis visualization with 2x2 layout
+    Hotspot analysis visualization (2x2 format, 4 files per page)
+    Shows hotspots overlay for all files in the dataset
     """
-    # Use 2x2 layout showing up to 4 files (2 original + 2 hotspot)
-    fig, axes = plt.subplots(2, 2, figsize=figsize)
+    files = list(folder_data.items())
+    n_files = len(files)
+    files_per_page = 4  # 2x2 format
     
-    file_items = list(folder_data.items())
+    figures = []
     
-    # Show up to 2 files in 2x2 layout
-    for i in range(min(2, len(file_items))):
-        file_id, (data, stats, filename) = file_items[i]
+    # Process files in chunks of 4 (2x2 per page)
+    for page_start in range(0, n_files, files_per_page):
+        page_end = min(page_start + files_per_page, n_files)
+        page_files = files[page_start:page_end]
+        n_page_files = len(page_files)
         
-        # Original data (top row)
-        im1 = axes[0, i].imshow(data, cmap='viridis', aspect='equal', vmin=vmin, vmax=vmax)
-        axes[0, i].set_title(f'{file_id.replace("File_", "")} - Original')
-        plt.colorbar(im1, ax=axes[0, i])
+        # Create 2x2 subplot layout
+        fig, axes = plt.subplots(2, 2, figsize=figsize)
+        axes = axes.flatten()  # Flatten for easy indexing
         
-        # Hotspot overlay (bottom row)
-        hotspots, threshold = detect_hotspots(data)
+        for i, (file_id, (data, stats, filename)) in enumerate(page_files):
+            # Hotspot overlay
+            hotspots, threshold = detect_hotspots(data)
+            
+            ax = axes[i]
+            # Show hotspots over original data
+            ax.imshow(data, cmap='viridis', aspect='equal', alpha=0.7, vmin=vmin, vmax=vmax)
+            im = ax.imshow(hotspots, cmap='Reds', aspect='equal', alpha=0.5)
+            ax.set_title(f'{file_id.replace("File_", "")} - Hotspots (>{threshold:.1f})\n{filename}', 
+                        fontsize=10, fontweight='bold')
+            
+            # Remove ticks for cleaner look
+            ax.set_xticks([])
+            ax.set_yticks([])
+            
+            # Add colorbar for hotspots
+            plt.colorbar(im, ax=ax, shrink=0.8)
         
-        # Show hotspots over original data
-        axes[1, i].imshow(data, cmap='viridis', aspect='equal', alpha=0.7, vmin=vmin, vmax=vmax)
-        axes[1, i].imshow(hotspots, cmap='Reds', aspect='equal', alpha=0.5)
-        axes[1, i].set_title(f'{file_id.replace("File_", "")} - Hotspots (>{threshold:.1f})')
+        # Hide unused subplots
+        for j in range(n_page_files, 4):
+            axes[j].set_visible(False)
+        
+        plt.tight_layout()
+        figures.append(fig)
     
-    # Hide unused subplots if less than 2 files
-    if len(file_items) < 2:
-        axes[0, 1].axis('off')
-        axes[1, 1].axis('off')
-    
-    plt.tight_layout()
-    return fig
+    return figures
 
 
-def create_control_charts(folder_data, figsize=(12, 10)):
-    """
-    관리도 생성 / Control charts
-    """
-    fig, axes = plt.subplots(2, 1, figsize=figsize)
-    
-    file_ids = []
-    means = []
-    ranges = []
-    
-    for file_id, (data, stats, filename) in folder_data.items():
-        file_ids.append(file_id.replace('File_', ''))
-        means.append(stats['mean'])
-        ranges.append(stats['range'])
-    
-    x_pos = np.arange(len(file_ids))
-    
-    # X-bar 차트 (평균 관리도) / X-bar chart
-    mean_avg = np.mean(means)
-    mean_std = np.std(means)
-    ucl_mean = mean_avg + 3 * mean_std
-    lcl_mean = mean_avg - 3 * mean_std
-    
-    axes[0].plot(x_pos, means, 'o-', linewidth=2, markersize=8, color='blue')
-    axes[0].axhline(y=mean_avg, color='green', linestyle='-', label=f'Center Line ({mean_avg:.2f})')
-    axes[0].axhline(y=ucl_mean, color='red', linestyle='--', label=f'UCL ({ucl_mean:.2f})')
-    axes[0].axhline(y=lcl_mean, color='red', linestyle='--', label=f'LCL ({lcl_mean:.2f})')
-    axes[0].set_xlabel('Files', fontsize=12)
-    axes[0].set_ylabel('Mean Values', fontsize=12)
-    axes[0].set_title('X-bar Control Chart (Mean)', fontweight='bold')
-    axes[0].set_xticks(x_pos)
-    axes[0].set_xticklabels(file_ids)
-    axes[0].grid(True, alpha=0.3)
-    axes[0].legend()
-    
-    # R 차트 (범위 관리도) / R chart
-    range_avg = np.mean(ranges)
-    range_std = np.std(ranges)
-    ucl_range = range_avg + 3 * range_std
-    lcl_range = max(0, range_avg - 3 * range_std)
-    
-    axes[1].plot(x_pos, ranges, 's-', linewidth=2, markersize=8, color='orange')
-    axes[1].axhline(y=range_avg, color='green', linestyle='-', label=f'Center Line ({range_avg:.2f})')
-    axes[1].axhline(y=ucl_range, color='red', linestyle='--', label=f'UCL ({ucl_range:.2f})')
-    axes[1].axhline(y=lcl_range, color='red', linestyle='--', label=f'LCL ({lcl_range:.2f})')
-    axes[1].set_xlabel('Files', fontsize=12)
-    axes[1].set_ylabel('Range Values', fontsize=12)
-    axes[1].set_title('R Control Chart (Range)', fontweight='bold')
-    axes[1].set_xticks(x_pos)
-    axes[1].set_xticklabels(file_ids)
-    axes[1].grid(True, alpha=0.3)
-    axes[1].legend()
-    
-    plt.tight_layout()
-    return fig
 
 
-def create_correlation_analysis(folder_data, figsize=(10, 8)):
+def create_correlation_analysis(folder_data, figsize=(11.69, 8.27)):
     """
     상관관계 분석 / Correlation analysis
     """
     # 모든 데이터를 플랫화하여 상관관계 매트릭스 생성 / Flatten all data to create correlation matrix
     data_matrix = []
     file_ids = []
+    min_samples = float('inf')
     
+    # First pass: collect data and find minimum sample size
+    temp_data = []
     for file_id, (data, stats, filename) in folder_data.items():
         flattened = data[~np.isnan(data)].flatten()
-        # 동일한 크기로 맞추기 위해 리샘플링 / Resample to same size
-        if len(flattened) > 1000:
-            indices = np.random.choice(len(flattened), 1000, replace=False)
-            flattened = flattened[indices]
-        data_matrix.append(flattened[:1000])  # 최대 1000개 점만 사용 / Use max 1000 points
+        temp_data.append(flattened)
         file_ids.append(file_id.replace('File_', ''))
+        min_samples = min(min_samples, len(flattened))
+    
+    # Second pass: ensure all arrays have same length (minimum available)
+    target_samples = min(min_samples, 1000)  # Use max 1000 points or minimum available
+    
+    for flattened in temp_data:
+        if len(flattened) >= target_samples:
+            # Randomly sample target_samples points
+            indices = np.random.choice(len(flattened), target_samples, replace=False)
+            sampled_data = flattened[indices]
+        else:
+            # If somehow we have fewer points, pad with the mean
+            sampled_data = np.pad(flattened, (0, target_samples - len(flattened)), 
+                                mode='constant', constant_values=np.mean(flattened))
+        data_matrix.append(sampled_data)
     
     # 상관관계 매트릭스 계산 / Calculate correlation matrix
     correlation_matrix = np.corrcoef(data_matrix)
@@ -645,13 +542,13 @@ def perform_pca_analysis(folder_data):
     return pca, pca_result, file_ids
 
 
-def create_pca_visualization(folder_data, figsize=(15, 5)):
+def create_pca_visualization(folder_data, figsize=(8.27, 11.69)):
     """
     주성분 분석 시각화 / PCA visualization
     """
     pca, pca_result, file_ids = perform_pca_analysis(folder_data)
     
-    fig, axes = plt.subplots(1, 3, figsize=figsize)
+    fig, axes = plt.subplots(3, 1, figsize=figsize)
     
     # 1. 설명된 분산 비율 / Explained variance ratio
     axes[0].bar(range(len(pca.explained_variance_ratio_)), pca.explained_variance_ratio_, alpha=0.7)
@@ -715,13 +612,13 @@ def perform_clustering_analysis(folder_data, n_clusters=3):
     return features_scaled, cluster_labels, file_ids, kmeans
 
 
-def create_clustering_visualization(folder_data, figsize=(12, 8)):
+def create_clustering_visualization(folder_data, figsize=(8.27, 11.69)):
     """
     클러스터링 시각화 / Clustering visualization
     """
     features_scaled, cluster_labels, file_ids, kmeans = perform_clustering_analysis(folder_data)
     
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=figsize)
     
     # PCA로 2D 시각화 / 2D visualization with PCA
     pca = PCA(n_components=2)
@@ -763,11 +660,11 @@ def create_clustering_visualization(folder_data, figsize=(12, 8)):
     return fig
 
 
-def create_stability_metrics(folder_data, figsize=(12, 6)):
+def create_stability_metrics(folder_data, figsize=(8.27, 11.69)):
     """
     안정성 메트릭 시각화 / Stability metrics visualization
     """
-    fig, axes = plt.subplots(1, 2, figsize=figsize)
+    fig, axes = plt.subplots(2, 1, figsize=figsize)
     
     file_ids = []
     cv_values = []  # Coefficient of variation
@@ -812,7 +709,7 @@ def create_stability_metrics(folder_data, figsize=(12, 6)):
     return fig
 
 
-def create_heatmap_overlays(folder_data, figsize=(8.27, 11.69), vmin=None, vmax=None):
+def create_heatmap_overlays(folder_data, figsize=(11.69, 8.27), vmin=None, vmax=None):
     """
     통계적 메트릭 히트맵 오버레이 (2x2 형식으로 페이지당 4개 파일)
     Statistical metrics heatmap overlays (2x2 format, 4 files per page)
@@ -863,7 +760,7 @@ def create_heatmap_overlays(folder_data, figsize=(8.27, 11.69), vmin=None, vmax=
     return figures
 
 
-def create_fourier_analysis(folder_data, figsize=(15, 10), vmin=None, vmax=None):
+def create_fourier_analysis(folder_data, figsize=(11.69, 8.27), vmin=None, vmax=None):
     """
     푸리에 분석 / Fourier analysis
     """
@@ -896,14 +793,11 @@ def create_fourier_analysis(folder_data, figsize=(15, 10), vmin=None, vmax=None)
 ADVANCED_PLOT_FUNCTIONS = {
     'violin_plots': create_violin_plots,
     'cdf_plots': create_cdf_plots,
-    'qq_plots': create_qq_plots,
     'gradient_analysis': create_gradient_analysis,
     'contour_plots': create_contour_plots,
     'cross_sectional_profiles': create_cross_sectional_profiles,
     'percentile_analysis': create_percentile_analysis,
-    'process_capability': create_process_capability_analysis,
     'hotspot_analysis': create_hotspot_analysis,
-    'control_charts': create_control_charts,
     'correlation_analysis': create_correlation_analysis,
     'pca_visualization': create_pca_visualization,
     'clustering_visualization': create_clustering_visualization,
@@ -950,30 +844,29 @@ def create_cover_page(folder_data, figsize=(8.27, 11.69)):
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Analysis Target Folder: {folder_display}
+Analysis Folder: {folder_display}
 
-Number of Files Analyzed: {file_count}
+Number of Files: {file_count}
 
-Generation Date: {current_datetime}
+Date: {current_datetime}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 
-This report presents comprehensive analysis results of PBA array warpage data 
-measured in Samsung Electronics manufacturing processes.
+PBA Warpage analysis
 
 
 Main Analysis Contents:
 • Individual PBA array heatmap analysis
 • Statistical comparison analysis across arrays
 • 3D surface visualization of warpage patterns
-• Advanced statistical analysis (optional)
+• Advanced statistical analysis
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Generated by Warpage Analysis Tool v2.0
-CAE Group, SiHun Lee
+CAE Group, MX division, s.hun.lee@samsung.com
 Samsung Electronics Co., Ltd.
 """
     
@@ -1019,7 +912,7 @@ def create_table_of_contents(folder_data, include_stats=True, include_3d=True, i
         toc_items.append("Individual File Analysis")
         for i, file_id in enumerate(sorted(folder_data.keys())):
             simple_id = file_id.replace('File_', '')
-            toc_items.append(f"  • File {simple_id} Analysis ................................................ {page_num}")
+            # toc_items.append(f"  • File {simple_id} Analysis ................................................ {page_num}")
             page_num += 1
         toc_items.append("")
     
@@ -1108,15 +1001,10 @@ Advanced Analysis:
 • CDF Plot: Cumulative distribution of (Max-Min) ranges across PBA arrays
 • Correlation Matrix: Shows relationships between different PBA arrays
 
-Q-Q Plots (Quantile-Quantile Plots):
-• Graph comparing data distribution with normal distribution  
-  - X-axis: Theoretical quantiles of normal distribution
-  - Y-axis: Sample quantiles of actual data
-  - Points closer to straight line = closer to normal distribution
-  - Curved or S-shaped pattern = non-normal distribution
 
 Distribution Analysis:
-• Violin Plots: Extension of box plots showing probability density of data distribution
+• Violin Plots: Extension of box plots showing probability 
+  density of data distribution
 • Percentile Analysis: Analysis of percentile distribution in data
 
 Generated by Warpage Analysis Tool v2.0
@@ -1164,6 +1052,28 @@ def create_comprehensive_advanced_analysis(folder_data, figsize=(8.27, 11.69), v
     
     print(f"Creating {len(analyses_to_create)} advanced statistical analyses...")
     
+    # Functions that should use landscape orientation (use their own defaults)
+    landscape_functions = [
+        'violin_plots', 'cdf_plots', 'gradient_analysis', 'contour_plots',
+        'cross_sectional_profiles', 'percentile_analysis', 'hotspot_analysis', 'heatmap_overlays'
+    ]
+    
+    # Title mapping for each analysis
+    analysis_titles = {
+        'violin_plots': 'Distribution Analysis - Violin Plots',
+        'cdf_plots': 'Cumulative Distribution Function',
+        'gradient_analysis': 'Gradient Magnitude Analysis', 
+        'contour_plots': 'Contour Analysis',
+        'cross_sectional_profiles': 'Center Row/Column Profile',
+        'percentile_analysis': 'Percentile Analysis',
+        'hotspot_analysis': 'Hotspot Analysis',
+        'heatmap_overlays': 'Local Variability',
+        'correlation_analysis': 'Correlation Analysis',
+        'pca_visualization': 'PCA Visualization',
+        'clustering_visualization': 'Clustering Visualization',
+        'stability_metrics': 'Stability Metrics'
+    }
+    
     all_results = []
     for i, (analysis_name, analysis_func) in enumerate(analyses_to_create):
         try:
@@ -1171,18 +1081,31 @@ def create_comprehensive_advanced_analysis(folder_data, figsize=(8.27, 11.69), v
             # Functions that need vmin/vmax for original data visualization
             functions_needing_vmin_vmax = ['gradient_analysis', 'hotspot_analysis', 'heatmap_overlays', 'fourier_analysis']
             
-            if analysis_name in functions_needing_vmin_vmax:
-                result = analysis_func(folder_data, figsize=figsize, vmin=vmin, vmax=vmax)
+            # Let landscape functions use their own defaults, others use provided figsize
+            if analysis_name in landscape_functions:
+                # Use function's default figsize (which is landscape)
+                if analysis_name in functions_needing_vmin_vmax:
+                    result = analysis_func(folder_data, vmin=vmin, vmax=vmax)
+                else:
+                    result = analysis_func(folder_data)
             else:
-                result = analysis_func(folder_data, figsize=figsize)
+                # Use provided figsize for portrait functions
+                if analysis_name in functions_needing_vmin_vmax:
+                    result = analysis_func(folder_data, figsize=figsize, vmin=vmin, vmax=vmax)
+                else:
+                    result = analysis_func(folder_data, figsize=figsize)
             
             if result is not None:
+                title = analysis_titles.get(analysis_name, f"Advanced Analysis - {analysis_name}")
+                
                 # Check if result is a list of figures (from 2x2 layout functions) or single figure
                 if isinstance(result, list):
-                    all_results.extend(result)  # Add all figures from the list
+                    for j, fig in enumerate(result):
+                        page_title = f"{title} - Page {j+1}" if len(result) > 1 else title
+                        all_results.append((fig, page_title))
                     print(f"    Added {len(result)} pages for {analysis_name}")
                 else:
-                    all_results.append(result)  # Add single figure
+                    all_results.append((result, title))  # Add tuple of (figure, title)
                     print(f"    Added 1 page for {analysis_name}")
             else:
                 print(f"    Warning: {analysis_name} returned None")
@@ -1190,5 +1113,5 @@ def create_comprehensive_advanced_analysis(folder_data, figsize=(8.27, 11.69), v
             print(f"    Error creating {analysis_name}: {str(e)}")
             continue
     
-    print(f"Successfully created {len(all_results)} advanced analysis figures")
+    print(f"Successfully created {len(all_results)} advanced analysis figures with titles")
     return all_results

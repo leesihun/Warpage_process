@@ -8,7 +8,10 @@
       "Bash(timeout:*)",
       "Bash(mv:*)",
       "Bash(pip install:*)",
-      "Bash(del *.pdf)"
+      "Bash(del *.pdf)",
+      "Bash(curl:*)",
+      "Bash(/dev/null)",
+      "Bash(pkill:*)"
     ],
     "deny": []
   }

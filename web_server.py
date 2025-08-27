@@ -1,153 +1,108 @@
 #!/usr/bin/env python3
 """
-Warpage Analysis Tool용 웹 기반 서버
-Web-based server for Warpage Analysis Tool
+PEMTRON Warpage Analysis Tool - Web Server
+Provides web interface for warpage data analysis and visualization
 """
 
-from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for
 import os
 import json
 import tempfile
-from werkzeug.utils import secure_filename
-import zipfile
-import io
-import base64
-import matplotlib
-matplotlib.use('Agg')  # Use non-interactive backend
-import matplotlib.pyplot as plt
-import numpy as np
-from io import BytesIO
 import webbrowser
 import threading
 import time
+from pathlib import Path
+from flask import Flask, render_template, request, jsonify, send_file
+from flask_cors import CORS
 
-# 분석 모듈들 가져오기 / Import our analysis modules
-from config import DATA_DIR, REPORT_DIR, WEB_PORT, WEB_HOST, WEB_DEBUG
-from data_loader import process_folder_data
+# Import analysis components
+from config import DEFAULT_CONFIG
+from data_loader import process_folder_data, find_data_files
 from warpage_statistics import calculate_statistics
-from visualization import (create_individual_plot, create_statistical_comparison_plots,
-                          create_mean_range_combined_plot, create_minmax_std_combined_plot,
-                          create_warpage_distribution_plot, create_web_gui_statistical_plots,
-                          create_comparison_plot, create_3d_surface_plot, create_mean_comparison_plot,
-                          create_range_comparison_plot, create_minmax_comparison_plot, create_std_comparison_plot,
-                          create_comprehensive_advanced_analysis)
-from advanced_statistics import create_comprehensive_advanced_analysis
-from pdf_exporter import export_to_pdf, export_to_pdf_from_webui_plots, ensure_report_directory
+import visualization
 
-app = Flask(__name__)
-app.config['MAX_CONTENT_LENGTH'] = 1000 * 1024 * 1024  # 1GB max file size
-app.secret_key = 'warpage_analysis_secret_key'
+app = Flask(__name__, 
+           template_folder='templates',
+           static_folder='templates/static')
+CORS(app)
 
-# 현재 분석 결과를 저장하는 전역 변수 / Global variable to store current analysis results
-current_analysis = None
+# Global variables for storing analysis results
+current_data = None
+current_plots = None
+current_stats = None
 
-def figure_to_base64(fig, dpi=150):
-    """Convert matplotlib figure to base64 string"""
-    img_buffer = BytesIO()
-    fig.savefig(img_buffer, format='png', dpi=dpi, bbox_inches='tight')
-    img_buffer.seek(0)
-    img_data = base64.b64encode(img_buffer.getvalue()).decode()
-    plt.close(fig)
-    return img_data
-
-def generate_all_plots(folder_data, vmin=None, vmax=None):
-    """Generate all plots and return as base64 images"""
-    plots = {}
+def has_data_files_recursive(directory_path, max_depth=3, current_depth=0):
+    """
+    Recursively check if a directory or its subdirectories contain data files.
     
-    print("Generating all plots in background...")
-    print(f"  Using color scale: vmin={vmin}, vmax={vmax}")
-    
-    # 1. Individual plots
-    print("  Generating individual plots...")
-    individual_plots = []
-    for file_id, (data, stats, filename) in folder_data.items():
-        fig = create_individual_plot(file_id, data, stats, filename, 
-                                   figsize=(8, 6), vmin=vmin, vmax=vmax, 
-                                   cmap='jet', colorbar=True)
-        img_data = figure_to_base64(fig)
-        individual_plots.append({
-            'file_id': file_id,
-            'filename': filename,
-            'image': img_data,
-            'stats': stats
-        })
-    plots['individual'] = individual_plots
-    
-    # 2. Comparison plot
-    print("  Generating comparison plot...")
-    fig = create_comparison_plot(folder_data, figsize=(20, 5), vmin=vmin, vmax=vmax)
-    plots['comparison'] = figure_to_base64(fig)
-    
-    # 3. 3D surface plots
-    print("  Generating 3D surface plots...")
-    fig = create_3d_surface_plot(folder_data, figsize=(20, 15))
-    plots['3d'] = figure_to_base64(fig)
-    
-    # 4. Statistical analysis
-    print("  Generating statistical analysis...")
-    fig = create_web_gui_statistical_plots(folder_data, figsize=(12, 16))
-    plots['statistics'] = figure_to_base64(fig)
-    
-    # 5. Individual statistical plots
-    print("  Generating individual statistical plots...")
-    fig = create_mean_comparison_plot(folder_data, figsize=(10, 6))
-    plots['mean'] = figure_to_base64(fig)
-    
-    fig = create_range_comparison_plot(folder_data, figsize=(10, 6))
-    plots['range'] = figure_to_base64(fig)
-    
-    fig = create_minmax_comparison_plot(folder_data, figsize=(10, 6))
-    plots['minmax'] = figure_to_base64(fig)
-    
-    fig = create_std_comparison_plot(folder_data, figsize=(10, 6))
-    plots['std'] = figure_to_base64(fig)
-    
-    # 6. Distribution plot
-    print("  Generating distribution plot...")
-    fig = create_warpage_distribution_plot(folder_data, figsize=(10, 8))
-    plots['distribution'] = figure_to_base64(fig)
-    
-    # 7. Advanced analysis plots
-    print("  Generating advanced analysis plots...")
-    advanced_figs = create_comprehensive_advanced_analysis(folder_data, figsize=(12, 16))
-    advanced_plots = []
-    for i, fig in enumerate(advanced_figs):
-        img_data = figure_to_base64(fig)
-        advanced_plots.append({
-            'title': f'Advanced Analysis - Page {i+1}',
-            'image': img_data
-        })
-    plots['advanced'] = advanced_plots
-    
-    print(f"  Generated {len(advanced_plots)} advanced analysis plots")
-    print("All plots generated successfully!")
-    
-    return plots
+    Args:
+        directory_path (str): Path to directory to check
+        max_depth (int): Maximum depth to recurse (prevent infinite recursion)
+        current_depth (int): Current recursion depth
+        
+    Returns:
+        bool: True if data files are found anywhere in the directory tree
+    """
+    if current_depth > max_depth:
+        return False
+        
+    try:
+        # First check the current directory for data files
+        if find_data_files(directory_path, True) or find_data_files(directory_path, False):
+            return True
+            
+        # Then check all subdirectories recursively
+        for item in os.listdir(directory_path):
+            item_path = os.path.join(directory_path, item)
+            if os.path.isdir(item_path) and not item.startswith('.'):
+                if has_data_files_recursive(item_path, max_depth, current_depth + 1):
+                    return True
+                    
+        return False
+        
+    except (OSError, IOError, PermissionError) as e:
+        # Handle permission errors or other file system issues gracefully
+        print(f"Warning: Could not access directory {directory_path}: {e}")
+        return False
 
 @app.route('/')
 def index():
-    """분석 폼이 있는 메인 페이지 / Main page with analysis form"""
+    """Main page"""
     return render_template('index.html')
 
 @app.route('/api/folders')
 def get_folders():
-    """사용 가능한 데이터 폴더들을 가져오는 API 엔드포인트 / API endpoint to get available data folders"""
+    """Get available data folders"""
     try:
-        if not os.path.exists(DATA_DIR):
-            return jsonify({'folders': [], 'error': 'Data directory not found'})
+        config = DEFAULT_CONFIG.copy()
+        data_dir = config.get('data_dir', 'data')
         
-        # Only show top-level folders
-        folders = [d for d in os.listdir(DATA_DIR) 
-                  if os.path.isdir(os.path.join(DATA_DIR, d))]
+        # Scan data directory for folders
+        folders = []
+        if os.path.exists(data_dir):
+            for item in os.listdir(data_dir):
+                item_path = os.path.join(data_dir, item)
+                if os.path.isdir(item_path) and not item.startswith('.'):
+                    # Check if folder contains data files (recursively check subdirectories)
+                    try:
+                        if has_data_files_recursive(item_path):
+                            folders.append(item)
+                    except Exception as e:
+                        # Skip problematic folders but log the issue
+                        print(f"Warning: Could not scan folder {item}: {e}")
+                        continue
+        
         folders.sort()
-        return jsonify({'folders': folders})
+        return jsonify({
+            'folders': folders,
+            'data_directory': data_dir
+        })
     except Exception as e:
-        return jsonify({'folders': [], 'error': str(e)})
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/analyze', methods=['POST'])
 def analyze():
-    """분석을 실행하는 API 엔드포인트 / API endpoint to run analysis"""
-    global current_analysis
+    """Analyze selected folder"""
+    global current_data, current_plots, current_stats
     
     try:
         data = request.get_json()
@@ -159,433 +114,466 @@ def analyze():
         vmax = data.get('vmax')
         
         if not folder:
-            return jsonify({'error': 'No folder selected'})
+            return jsonify({'error': 'No folder selected'}), 400
         
-        # Run analysis
-        folder_path = os.path.join(DATA_DIR, folder)
-        if not os.path.exists(folder_path):
-            return jsonify({'error': f'Folder {folder} not found'})
+        # Update config
+        config = DEFAULT_CONFIG.copy()
+        config['use_original_files'] = use_original
+        config['row_fraction'] = row_fraction
+        config['col_fraction'] = col_fraction
+        if vmin is not None:
+            config['vmin'] = vmin
+        if vmax is not None:
+            config['vmax'] = vmax
         
-        print(f"Starting analysis of folder: {folder}")
+        # Load data  
+        data_dir = config.get('data_dir', 'data')
+        folder_results = process_folder_data(data_dir, folder, row_fraction, col_fraction, use_original)
+        if not folder_results:
+            return jsonify({'error': f'No data found in folder: {folder}'}), 400
         
-        # Process folder data and all subdirectories
-        results = []
-        total_files_processed = 0
-        status_messages = []
-        
-        # Process the main folder
-        status_msg = f"Processing main folder: {folder}"
-        print(status_msg)
-        status_messages.append(status_msg)
-        
-        main_results = process_folder_data(DATA_DIR, folder, row_fraction, col_fraction, use_original)
-        results.extend(main_results)
-        total_files_processed += len(main_results)
-        
-        status_msg = f"OK Main folder processed: {len(main_results)} files"
-        print(status_msg)
-        status_messages.append(status_msg)
-        
-        # Process all subdirectories
-        subdirs_found = []
-        for root, dirs, files in os.walk(folder_path):
-            for subdir in dirs:
-                subdirs_found.append(subdir)
-        
-        status_msg = f"Found {len(subdirs_found)} subdirectories to process"
-        print(status_msg)
-        status_messages.append(status_msg)
-        
-        for i, subdir in enumerate(subdirs_found):
-            subdir_path = os.path.join(folder_path, subdir)
-            rel_path = os.path.relpath(subdir_path, DATA_DIR)
-            
-            status_msg = f"Processing subdirectory {i+1}/{len(subdirs_found)}: {subdir}"
-            print(status_msg)
-            status_messages.append(status_msg)
-            
-            sub_results = process_folder_data(DATA_DIR, rel_path, row_fraction, col_fraction, use_original)
-            results.extend(sub_results)
-            total_files_processed += len(sub_results)
-            
-            status_msg = f"OK Subdirectory {subdir} processed: {len(sub_results)} files"
-            print(status_msg)
-            status_messages.append(status_msg)
-        
-        status_msg = f"Total files processed: {total_files_processed}"
-        print(status_msg)
-        status_messages.append(status_msg)
-        
-        if not results:
-            return jsonify({'error': f'No data files found in {folder}'})
-        
-        # Create analysis results
-        status_msg = "Creating analysis results..."
-        print(status_msg)
-        status_messages.append(status_msg)
-        
-        analysis_results = {}
-        for i, (data, stats, filename) in enumerate(results):
+        # Convert to expected format for other functions
+        current_data = {}
+        current_stats = []
+        for i, (data_array, stats, filename) in enumerate(folder_results):
             file_id = f"File_{i+1:02d}"
-            analysis_results[file_id] = {
-                'data': data.tolist(),  # Convert numpy array to list for JSON
-                'stats': stats,
-                'filename': filename,
-                'shape': data.shape
-            }
-            
-            status_msg = f"  Prepared {file_id}: {filename} ({data.shape})"
-            print(status_msg)
-            status_messages.append(status_msg)
+            current_data[file_id] = (data_array, stats, filename)
+            current_stats.append(stats)
         
-        # Generate all plots in background
-        status_msg = "Generating all visualization plots..."
-        print(status_msg)
-        status_messages.append(status_msg)
+        # Create plots
+        individual_plots = []
+        for file_id, (data_array, stats, filename) in current_data.items():
+            fig = visualization.create_individual_plot(file_id, data_array, stats, filename, 
+                                               vmin=config.get('vmin'), vmax=config.get('vmax'), 
+                                               cmap=config.get('cmap', 'jet'))
+            plot_base64 = visualization.figure_to_base64(fig)
+            individual_plots.append(plot_base64)
         
-        folder_data = {}
-        for file_id, result in analysis_results.items():
-            data = np.array(result['data'])
-            stats = result['stats']
-            filename = result['filename']
-            folder_data[file_id] = (data, stats, filename)
-        
-        all_plots = generate_all_plots(folder_data, vmin, vmax)
-        
-        current_analysis = {
-            'folder': folder,
-            'use_original': use_original,
-            'row_fraction': row_fraction,
-            'col_fraction': col_fraction,
-            'vmin': vmin,
-            'vmax': vmax,
-            'results': analysis_results,
-            'plots': all_plots
-        }
-        
-        # Prepare summary for response
-        summary = {
-            'folder': folder,
-            'file_count': len(analysis_results),
-            'files': list(analysis_results.keys()),
-            'total_data_points': sum(stats['shape'][0] * stats['shape'][1] 
-                                   for stats in analysis_results.values())
-        }
-        
-        return jsonify({
-            'success': True,
-            'summary': summary,
-            'analysis_id': id(current_analysis),
-            'status_messages': status_messages
-        })
-        
-    except Exception as e:
-        return jsonify({'error': f'Analysis failed: {str(e)}'})
-
-@app.route('/api/all_plots')
-def get_all_plots():
-    """API endpoint to get all plots at once"""
-    global current_analysis
-    
-    if not current_analysis or 'plots' not in current_analysis:
-        return jsonify({'error': 'No analysis data available'})
-    
-    try:
-        return jsonify({
-            'success': True,
-            'plots': current_analysis['plots'],
-            'summary': {
-                'folder': current_analysis['folder'],
-                'file_count': len(current_analysis['results']),
-                'files': list(current_analysis['results'].keys())
-            }
-        })
-        
-    except Exception as e:
-        return jsonify({'error': f'Failed to get plots: {str(e)}'})
-
-@app.route('/api/plot/<file_id>')
-def get_plot(file_id):
-    """API endpoint to get individual plot as base64 image"""
-    global current_analysis
-    
-    if not current_analysis or 'plots' not in current_analysis:
-        return jsonify({'error': 'No analysis data available'})
-    
-    try:
-        # Find the individual plot (already generated with vmin/vmax in generate_all_plots)
-        individual_plots = current_analysis['plots']['individual']
-        for plot in individual_plots:
-            if plot['file_id'] == file_id:
-                return jsonify({
-                    'success': True,
-                    'image': plot['image'],
-                    'filename': plot['filename'],
-                    'stats': plot['stats']
-                })
-        
-        return jsonify({'error': f'Plot for {file_id} not found'})
-        
-    except Exception as e:
-        return jsonify({'error': f'Plot retrieval failed: {str(e)}'})
-
-@app.route('/api/stats_plot')
-def get_stats_plot():
-    """API endpoint to get statistical comparison plot"""
-    global current_analysis
-    
-    if not current_analysis or 'plots' not in current_analysis:
-        return jsonify({'error': 'No analysis data available'})
-    
-    try:
-        return jsonify({
-            'success': True,
-            'image': current_analysis['plots']['statistics']
-        })
-        
-    except Exception as e:
-        return jsonify({'error': f'Statistical plot retrieval failed: {str(e)}'})
-
-@app.route('/api/comparison_plot')
-def get_comparison_plot():
-    """API endpoint to get side-by-side comparison plot"""
-    global current_analysis
-    
-    if not current_analysis or 'plots' not in current_analysis:
-        return jsonify({'error': 'No analysis data available'})
-    
-    try:
-        return jsonify({
-            'success': True,
-            'image': current_analysis['plots']['comparison']
-        })
-        
-    except Exception as e:
-        return jsonify({'error': f'Comparison plot retrieval failed: {str(e)}'})
-
-@app.route('/api/3d_plot')
-def get_3d_plot():
-    """API endpoint to get 3D surface plots"""
-    global current_analysis
-    
-    if not current_analysis or 'plots' not in current_analysis:
-        return jsonify({'error': 'No analysis data available'})
-    
-    try:
-        return jsonify({
-            'success': True,
-            'image': current_analysis['plots']['3d']
-        })
-        
-    except Exception as e:
-        return jsonify({'error': f'3D plot retrieval failed: {str(e)}'})
-
-@app.route('/api/mean_plot')
-def get_mean_plot():
-    """API endpoint to get mean comparison plot"""
-    global current_analysis
-    
-    if not current_analysis or 'plots' not in current_analysis:
-        return jsonify({'error': 'No analysis data available'})
-    
-    try:
-        return jsonify({
-            'success': True,
-            'image': current_analysis['plots']['mean']
-        })
-        
-    except Exception as e:
-        return jsonify({'error': f'Mean plot retrieval failed: {str(e)}'})
-
-@app.route('/api/range_plot')
-def get_range_plot():
-    """API endpoint to get range comparison plot"""
-    global current_analysis
-    
-    if not current_analysis or 'plots' not in current_analysis:
-        return jsonify({'error': 'No analysis data available'})
-    
-    try:
-        return jsonify({
-            'success': True,
-            'image': current_analysis['plots']['range']
-        })
-        
-    except Exception as e:
-        return jsonify({'error': f'Range plot retrieval failed: {str(e)}'})
-
-@app.route('/api/minmax_plot')
-def get_minmax_plot():
-    """API endpoint to get min-max comparison plot"""
-    global current_analysis
-    
-    if not current_analysis or 'plots' not in current_analysis:
-        return jsonify({'error': 'No analysis data available'})
-    
-    try:
-        return jsonify({
-            'success': True,
-            'image': current_analysis['plots']['minmax']
-        })
-        
-    except Exception as e:
-        return jsonify({'error': f'Min-Max plot retrieval failed: {str(e)}'})
-
-@app.route('/api/std_plot')
-def get_std_plot():
-    """API endpoint to get standard deviation comparison plot"""
-    global current_analysis
-    
-    if not current_analysis or 'plots' not in current_analysis:
-        return jsonify({'error': 'No analysis data available'})
-    
-    try:
-        return jsonify({
-            'success': True,
-            'image': current_analysis['plots']['std']
-        })
-        
-    except Exception as e:
-        return jsonify({'error': f'Std plot retrieval failed: {str(e)}'})
-
-@app.route('/api/distribution_plot')
-def get_distribution_plot():
-    """API endpoint to get warpage distribution plot"""
-    global current_analysis
-    
-    if not current_analysis or 'plots' not in current_analysis:
-        return jsonify({'error': 'No analysis data available'})
-    
-    try:
-        return jsonify({
-            'success': True,
-            'image': current_analysis['plots']['distribution']
-        })
-        
-    except Exception as e:
-        return jsonify({'error': f'Distribution plot retrieval failed: {str(e)}'})
-
-@app.route('/api/advanced_analysis')
-def get_advanced_analysis():
-    """API endpoint to get advanced analysis plots"""
-    global current_analysis
-    
-    if not current_analysis or 'plots' not in current_analysis:
-        return jsonify({'error': 'No analysis data available'})
-    
-    try:
-        return jsonify({
-            'success': True,
-            'plots': current_analysis['plots']['advanced']
-        })
-        
-    except Exception as e:
-        return jsonify({'error': f'Advanced analysis retrieval failed: {str(e)}'})
-
-@app.route('/api/export_pdf')
-def export_pdf():
-    """API endpoint to export PDF report"""
-    global current_analysis
-    
-    if not current_analysis:
-        return jsonify({'error': 'No analysis data available'})
-    
-    try:
-        status_messages = []
-        
-        status_msg = f"Starting PDF export for folder: {current_analysis['folder']}"
-        print(status_msg)
-        status_messages.append(status_msg)
-        
-        status_msg = f"Number of files to process: {len(current_analysis['results'])}"
-        print(status_msg)
-        status_messages.append(status_msg)
-        
-        # Use the efficient PDF export method with pre-generated plots
-        status_msg = "Creating efficient PDF report from web UI plots..."
-        print(status_msg)
-        status_messages.append(status_msg)
-        
-        # Prepare folder_data for cover page and metadata (only basic structure needed)
-        folder_data = {}
-        for file_id, result in current_analysis['results'].items():
-            data = np.array(result['data'])
-            stats = result['stats']
-            filename = result['filename']
-            folder_data[file_id] = (data, stats, filename)
-        
-        # Export PDF using pre-generated plots from web UI
-        pdf_path = export_to_pdf_from_webui_plots(
-            plots_data=current_analysis['plots'],
-            folder_data=folder_data,
-            output_filename=f'warpage_analysis_{current_analysis["folder"].replace("/", "_")}.pdf'
-        )
-        
-        status_msg = f"PDF export returned path: {pdf_path}"
-        print(status_msg)
-        status_messages.append(status_msg)
-        
-        if pdf_path and os.path.exists(pdf_path):
-            file_size = os.path.getsize(pdf_path)
-            status_msg = f"PDF file exists at: {pdf_path}"
-            print(status_msg)
-            status_messages.append(status_msg)
-            
-            status_msg = f"PDF file size: {file_size} bytes"
-            print(status_msg)
-            status_messages.append(status_msg)
-            
-            status_msg = "PDF export completed successfully!"
-            print(status_msg)
-            status_messages.append(status_msg)
-            
-            return send_file(pdf_path, as_attachment=True, 
-                           download_name=os.path.basename(pdf_path))
+        comparison_figs = visualization.create_comparison_plot(current_data, vmin=config.get('vmin'), vmax=config.get('vmax'), cmap=config.get('cmap', 'jet'))
+        if comparison_figs and len(comparison_figs) > 0:
+            comparison_plot = visualization.figure_to_base64(comparison_figs[0])
         else:
-            status_msg = f"PDF file does not exist at: {pdf_path}"
-            print(status_msg)
-            status_messages.append(status_msg)
-            return jsonify({'error': 'PDF generation failed - file not created'})
+            comparison_plot = ''
+        
+        current_plots = {
+            'individual': individual_plots,
+            'comparison': comparison_plot
+        }
+        
+        # Prepare response
+        file_list = [filename for _, _, filename in current_data.values()]
+        plots_available = list(current_plots.keys()) if current_plots else []
+        
+        # Calculate total data points
+        total_data_points = 0
+        for data_array, _, _ in current_data.values():
+            if data_array is not None:
+                total_data_points += data_array.size
+        
+        return jsonify({
+            'success': True,
+            'summary': {
+                'folder': folder,
+                'file_count': len(current_data),
+                'files': file_list,
+                'plots_available': plots_available,
+                'total_data_points': total_data_points
+            }
+        })
         
     except Exception as e:
         import traceback
-        error_msg = f"PDF export error: {e}"
-        print(error_msg)
-        print(f"Full traceback: {traceback.format_exc()}")
-        return jsonify({'error': f'PDF export failed: {str(e)}'})
+        print(f"Analysis error: {e}")
+        traceback.print_exc()
+        return jsonify({'error': f'Analysis failed: {str(e)}'}), 500
 
+@app.route('/api/plot/<file_id>')
+def get_plot(file_id):
+    """Get individual plot"""
+    global current_plots
+    
+    try:
+        if not current_plots:
+            return jsonify({'error': 'No plots available'}), 404
+        
+        # Handle both integer indices and filename strings
+        file_index = None
+        
+        # Try to parse as integer index first
+        try:
+            file_index = int(file_id)
+        except ValueError:
+            # If not an integer, try to find by filename
+            if current_data:
+                for i, (_, _, filename) in enumerate(current_data.values()):
+                    if filename == file_id:
+                        file_index = i
+                        break
+        
+        if file_index is None:
+            return jsonify({'error': f'File not found: {file_id}'}), 400
+            
+        try:
+            if 'individual' in current_plots and file_index < len(current_plots['individual']):
+                plot_base64 = current_plots['individual'][file_index]
+                
+                # Get file info and stats
+                file_keys = list(current_data.keys())
+                if file_index < len(file_keys):
+                    file_key = file_keys[file_index]
+                    _, stats, filename = current_data[file_key]
+                    
+                    return jsonify({
+                        'success': True,
+                        'image': plot_base64,
+                        'file_index': file_index,
+                        'filename': filename,
+                        'stats': {
+                            'shape': f"{stats['shape'][0]}x{stats['shape'][1]}",
+                            'min': stats['min'],
+                            'max': stats['max'],
+                            'mean': stats['mean'],
+                            'range': stats['range']
+                        }
+                    })
+                else:
+                    return jsonify({
+                        'success': True,
+                        'image': plot_base64,
+                        'file_index': file_index,
+                        'filename': f'File_{file_index+1}',
+                        'stats': {'shape': 'Unknown', 'min': 0, 'max': 0, 'mean': 0, 'range': 0}
+                    })
+        except (IndexError) as e:
+            return jsonify({'error': f'Plot not found for index: {file_index}'}), 400
+        
+        return jsonify({'error': 'Plot not found'}), 404
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
+@app.route('/api/stats_plot')
+def get_stats_plot():
+    """Get statistical comparison plot"""
+    global current_plots
+    
+    try:
+        if not current_plots or 'comparison' not in current_plots:
+            return jsonify({'error': 'No comparison plot available'}), 404
+        
+        return jsonify({
+            'success': True,
+            'image': current_plots['comparison']
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/export_pdf', methods=['GET', 'POST'])
+def export_pdf_report():
+    """Export analysis as PDF"""
+    global current_data, current_plots, current_stats
+    
+    try:
+        if not current_data:
+            return jsonify({'error': 'No analysis data available'}), 400
+        
+        # Handle both GET and POST requests - avoid any automatic JSON parsing
+        filename = 'warpage_analysis_report.pdf'  # default
+        
+        if request.method == 'POST':
+            # For POST, only try JSON if content type is explicitly set
+            try:
+                content_type = request.content_type or ''
+                if 'application/json' in content_type:
+                    data = request.get_json(force=False, silent=True) or {}
+                    filename = data.get('filename', filename)
+            except Exception:
+                pass  # Use default filename
+        else:
+            # For GET, use query parameters
+            filename = request.args.get('filename', filename)
+        
+        # Create temporary file
+        temp_dir = Path(tempfile.gettempdir())
+        output_path = temp_dir / filename
+        
+        # Generate PDF report
+        import pdf_exporter
+        pdf_path = pdf_exporter.export_to_pdf(
+            current_data, 
+            str(output_path),
+            include_stats=True,
+            include_3d=True,
+            include_advanced=True
+        )
+        
+        # Return the file for download
+        return send_file(pdf_path, as_attachment=True, download_name=filename)
+            
+    except Exception as e:
+        return jsonify({'error': f'PDF export error: {str(e)}'}), 500
+
+@app.route('/api/comparison_plot')
+def get_comparison_plot():
+    """Get comparison plot - same as stats plot for now"""
+    return get_stats_plot()
+
+@app.route('/api/3d_plot')
+def get_3d_plot():
+    """Get 3D surface plot"""
+    global current_data, current_plots
+    
+    try:
+        if not current_data:
+            return jsonify({'error': 'No analysis data available'}), 404
+        
+        # Create 3D surface plot using visualization module
+        plot_base64 = visualization.create_3d_surface_plot(current_data)
+        
+        return jsonify({
+            'success': True,
+            'image': plot_base64
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/mean_plot')
+def get_mean_plot():
+    """Get mean analysis plot"""
+    global current_data
+    
+    try:
+        if not current_data:
+            return jsonify({'error': 'No analysis data available'}), 404
+        
+        # Create mean comparison plot
+        plot_base64 = visualization.create_mean_comparison_plot(current_data)
+        
+        return jsonify({
+            'success': True,
+            'image': plot_base64
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/range_plot')
+def get_range_plot():
+    """Get range analysis plot"""
+    global current_data
+    
+    try:
+        if not current_data:
+            return jsonify({'error': 'No analysis data available'}), 404
+        
+        # Create range comparison plot
+        plot_base64 = visualization.create_range_comparison_plot(current_data)
+        
+        return jsonify({
+            'success': True,
+            'image': plot_base64
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/minmax_plot')
+def get_minmax_plot():
+    """Get min-max analysis plot"""
+    global current_data
+    
+    try:
+        if not current_data:
+            return jsonify({'error': 'No analysis data available'}), 404
+        
+        # Create min-max comparison plot
+        plot_base64 = visualization.create_minmax_comparison_plot(current_data)
+        
+        return jsonify({
+            'success': True,
+            'image': plot_base64
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/std_plot')
+def get_std_plot():
+    """Get standard deviation analysis plot"""
+    global current_data
+    
+    try:
+        if not current_data:
+            return jsonify({'error': 'No analysis data available'}), 404
+        
+        # Create std deviation comparison plot
+        plot_base64 = visualization.create_std_comparison_plot(current_data)
+        
+        return jsonify({
+            'success': True,
+            'image': plot_base64
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/distribution_plot')
+def get_distribution_plot():
+    """Get distribution analysis plot"""
+    global current_data
+    
+    try:
+        if not current_data:
+            return jsonify({'error': 'No analysis data available'}), 404
+        
+        # Create warpage distribution plot
+        plot_base64 = visualization.create_warpage_distribution_plot(current_data)
+        
+        return jsonify({
+            'success': True,
+            'image': plot_base64
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/advanced_analysis')
+def get_advanced_analysis():
+    """Get advanced analysis plots"""
+    global current_data
+    
+    try:
+        if not current_data:
+            return jsonify({'error': 'No analysis data available'}), 404
+        
+        # Create comprehensive advanced analysis
+        plot_base64 = visualization.create_comprehensive_advanced_analysis(current_data)
+        
+        return jsonify({
+            'success': True,
+            'plots': [{
+                'title': 'Advanced Statistical Analysis',
+                'image': plot_base64
+            }]
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/all_plots')
+def get_all_plots():
+    """Get all plots in one response"""
+    global current_data, current_plots, current_stats
+    
+    try:
+        if not current_data or not current_plots:
+            return jsonify({'error': 'No analysis data available'}), 404
+        
+        # Build comprehensive plots response
+        all_plots = {
+            'individual': [],
+            'comparison': current_plots.get('comparison', ''),
+            '3d': '',
+            'statistics': current_plots.get('comparison', ''),  # Use comparison for now
+            'mean': '',
+            'range': '',
+            'minmax': '',
+            'std': '',
+            'distribution': '',
+            'advanced': []
+        }
+        
+        # Add individual plots with metadata
+        file_keys = list(current_data.keys())
+        for i, plot_base64 in enumerate(current_plots.get('individual', [])):
+            if i < len(file_keys):
+                file_key = file_keys[i]
+                _, stats, filename = current_data[file_key]
+                all_plots['individual'].append({
+                    'file_id': file_key,
+                    'filename': filename,
+                    'image': plot_base64,
+                    'stats': stats
+                })
+        
+        # Generate other plot types if needed (with proper base64 conversion)
+        try:
+            if current_data:
+                mean_fig = visualization.create_mean_comparison_plot(current_data)
+                all_plots['mean'] = visualization.figure_to_base64(mean_fig)
+                
+                range_fig = visualization.create_range_comparison_plot(current_data)
+                all_plots['range'] = visualization.figure_to_base64(range_fig)
+                
+                minmax_fig = visualization.create_minmax_comparison_plot(current_data)
+                all_plots['minmax'] = visualization.figure_to_base64(minmax_fig)
+                
+                std_fig = visualization.create_std_comparison_plot(current_data)
+                all_plots['std'] = visualization.figure_to_base64(std_fig)
+                
+                dist_fig = visualization.create_warpage_distribution_plot(current_data)
+                all_plots['distribution'] = visualization.figure_to_base64(dist_fig)
+        except Exception as e:
+            print(f"Warning: Could not generate statistical plots: {e}")
+            pass  # Skip if visualization methods don't exist
+        
+        try:
+            if current_data:
+                surface_fig = visualization.create_3d_surface_plot(current_data)
+                all_plots['3d'] = visualization.figure_to_base64(surface_fig)
+        except Exception as e:
+            print(f"Warning: Could not generate 3D plot: {e}")
+            pass  # Skip if 3D method doesn't exist
+        
+        return jsonify({
+            'success': True,
+            'plots': all_plots
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/status')
+def get_status():
+    """Get server status"""
+    global current_data, current_plots
+    
+    return jsonify({
+        'healthy': True,
+        'has_data': current_data is not None,
+        'has_plots': current_plots is not None,
+        'file_count': len(current_data) if current_data else 0
+    })
 
 def open_browser():
-    """Open the web browser after a short delay to ensure server is ready"""
-    time.sleep(2.0)  # Wait longer for server to start
-    url = f"http://localhost:{WEB_PORT}"
+    """Open browser after server starts"""
+    time.sleep(2)  # Wait for server to start
     try:
-        webbrowser.open(url)
-        print(f"OK Browser opened successfully to {url}")
+        webbrowser.open('http://localhost:8080')
+        print("✓ Browser opened to http://localhost:8080")
     except Exception as e:
-        print(f"WARNING Could not open browser automatically: {e}")
-        print(f"Please manually open: {url}")
+        print(f"Could not open browser: {e}")
+        print("Please manually open: http://localhost:8080")
 
 if __name__ == '__main__':
-    # Create templates directory if it doesn't exist
-    os.makedirs('templates', exist_ok=True)
+    print("=" * 60)
+    print("PEMTRON Warpage Analysis Tool - Web Interface")
+    print("=" * 60)
+    print()
+    print("Starting server on http://localhost:8080")
+    print("Press Ctrl+C to stop")
+    print()
     
-    print("Starting Warpage Analysis Web GUI...")
-    print(f"Server will start on: http://localhost:{WEB_PORT}")
-    
-    # Start browser in a separate thread
-    browser_thread = threading.Thread(target=open_browser)
-    browser_thread.daemon = True
-    browser_thread.start()
+    # Start browser in background
+    if DEFAULT_CONFIG.get('auto_open_browser', True):
+        browser_thread = threading.Thread(target=open_browser, daemon=True)
+        browser_thread.start()
     
     try:
-        app.run(debug=WEB_DEBUG, host=WEB_HOST, port=WEB_PORT)
-    except OSError as e:
-        if "Address already in use" in str(e):
-            print(f"WARNING Port {WEB_PORT} is already in use!")
-            print(f"Please try a different port in config.py or close other applications using port {WEB_PORT}")
-        else:
-            print(f"WARNING Server error: {e}")
+        app.run(host='0.0.0.0', port=8080, debug=True, use_reloader=False)
+    except KeyboardInterrupt:
+        print("\n✓ Server stopped")
     except Exception as e:
-        print(f"WARNING Unexpected error: {e}") 
+        print(f"Server error: {e}")

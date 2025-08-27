@@ -5,13 +5,43 @@ Visualization functions for Warpage Analyzer
 """
 
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+import base64
+import io
+# Import Plotly for interactive visualizations
+import plotly.graph_objects as go
+import plotly.express as px
+from plotly.subplots import make_subplots
+import plotly.io as pio
 # 고급 통계 함수들 가져오기 / Import advanced statistics functions
 try:
     from advanced_statistics import ADVANCED_PLOT_FUNCTIONS
 except ImportError:
     ADVANCED_PLOT_FUNCTIONS = {}
+
+
+def figure_to_base64(fig):
+    """
+    Convert a matplotlib figure to a base64-encoded string.
+    
+    Args:
+        fig (matplotlib.figure.Figure): The figure to convert
+        
+    Returns:
+        str: Base64-encoded PNG image
+    """
+    buffer = io.BytesIO()
+    fig.savefig(buffer, format='png', dpi=150, bbox_inches='tight')
+    buffer.seek(0)
+    image_png = buffer.getvalue()
+    buffer.close()
+    plt.close(fig)  # Clean up the figure to prevent memory leaks
+    
+    graphic = base64.b64encode(image_png)
+    return graphic.decode('utf-8')
 
 
 def get_readable_x_axis_ticks(x_pos, labels, max_labels=10):
@@ -39,9 +69,9 @@ def get_readable_x_axis_ticks(x_pos, labels, max_labels=10):
         return selected_x_pos, selected_labels
 
 
-def create_comparison_plot(folder_data, figsize=(20, 5), vmin=None, vmax=None, cmap='jet', colorbar=True):
+def create_comparison_plot(folder_data, figsize=(11.69, 8.27), vmin=None, vmax=None, cmap='jet', colorbar=True):
     """
-    Create a comparison plot showing all files side by side with consistent scaling.
+    Create a comparison plot showing all files in 4x4 grid configuration.
     
     Args:
         folder_data (dict): Dictionary with file_id as key and (data, stats, filename) as value
@@ -51,52 +81,71 @@ def create_comparison_plot(folder_data, figsize=(20, 5), vmin=None, vmax=None, c
         colorbar (bool): Whether to show colorbar
         
     Returns:
-        matplotlib.figure.Figure: The created figure
+        list: List of matplotlib figures (one or more pages)
     """
-    fig, axes = plt.subplots(1, len(folder_data), figsize=figsize)
-    fig.suptitle('Warpage Data Comparison', fontsize=16, fontweight='bold')
+    files = list(folder_data.items())
+    n_files = len(files)
+    files_per_page = 16  # 4x4 format
     
-    if len(folder_data) == 1:
-        axes = [axes]
+    figures = []
     
     # Find consistent axis limits for all subplots
-    all_shapes = [data[0].shape for data in folder_data.values() if data[0] is not None]
+    all_shapes = [data.shape for _, (data, stats, filename) in files if data is not None]
     if all_shapes:
         max_rows = max(shape[0] for shape in all_shapes)
         max_cols = max(shape[1] for shape in all_shapes)
     else:
         max_rows, max_cols = 100, 100  # Default fallback
     
-    for i, (file_id, (data, stats, filename)) in enumerate(folder_data.items()):
-        if data is not None:
-            im = axes[i].imshow(data, cmap=cmap, vmin=vmin, vmax=vmax)
-            # Simplify file ID to just number
-            simple_file_id = file_id.replace('File_', '')
-            axes[i].set_title(f'{simple_file_id}\n{filename}', fontweight='bold')
-            axes[i].set_aspect('equal')
-            
-            # Set consistent axis limits
-            axes[i].set_xlim(0, max_cols)
-            axes[i].set_ylim(max_rows, 0)  # Inverted y-axis for image display
-            
-            # Remove tick labels for cleaner look
-            axes[i].set_xticks([])
-            axes[i].set_yticks([])
-            
-            # Add statistics text
-            stats_text = f"Min: {stats['min']:.4f}\nMax: {stats['max']:.4f}\nMean: {stats['mean']:.4f}"
-            axes[i].text(0.02, 0.98, stats_text, transform=axes[i].transAxes, 
+    # Process files in chunks of 16 (4x4 per page)
+    for page_start in range(0, n_files, files_per_page):
+        page_end = min(page_start + files_per_page, n_files)
+        page_files = files[page_start:page_end]
+        n_page_files = len(page_files)
+        
+        # Create 4x4 subplot layout
+        fig, axes = plt.subplots(4, 4, figsize=figsize)
+        fig.suptitle('Warpage Data Comparison', fontsize=16, fontweight='bold')
+        axes = axes.flatten()  # Flatten for easy indexing
+        
+        for i, (file_id, (data, stats, filename)) in enumerate(page_files):
+            if data is not None:
+                ax = axes[i]
+                im = ax.imshow(data, cmap=cmap, vmin=vmin, vmax=vmax)
+                
+                # Simplify file ID to just number
+                simple_file_id = file_id.replace('File_', '')
+                ax.set_title(f'{simple_file_id}\n{filename}', fontsize=8, fontweight='bold')
+                ax.set_aspect('equal')
+                
+                # Set consistent axis limits
+                ax.set_xlim(0, max_cols)
+                ax.set_ylim(max_rows, 0)  # Inverted y-axis for image display
+                
+                # Remove tick labels for cleaner look
+                ax.set_xticks([])
+                ax.set_yticks([])
+                
+                # Add statistics text (smaller for 4x4 grid)
+                stats_text = f"Min: {stats['min']:.3f}\nMax: {stats['max']:.3f}\nMean: {stats['mean']:.3f}"
+                ax.text(0.02, 0.98, stats_text, transform=ax.transAxes, fontsize=6,
                         verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+        
+        # Hide unused subplots
+        for j in range(n_page_files, 16):
+            axes[j].set_visible(False)
+        
+        # Add colorbar if requested (only one for the entire figure)
+        if colorbar and n_page_files > 0:
+            fig.colorbar(im, ax=[ax for ax in axes[:n_page_files]], shrink=0.6, label='Warpage Value')
+        
+        plt.tight_layout()
+        figures.append(fig)
     
-    # Add colorbar if requested (only one for the entire figure)
-    if colorbar and len(folder_data) > 0:
-        fig.colorbar(im, ax=axes, shrink=0.6, label='Warpage Value')
-    
-    plt.tight_layout()
-    return fig
+    return figures
 
 
-def create_comprehensive_advanced_analysis(folder_data, figsize=(20, 24)):
+def create_comprehensive_advanced_analysis(folder_data, figsize=(8.27, 11.69)):
     """
     종합 고급 분석 보고서 생성 / Create comprehensive advanced analysis report
     
@@ -113,9 +162,7 @@ def create_comprehensive_advanced_analysis(folder_data, figsize=(20, 24)):
     plot_configs = [
         ('violin_plots', 'Distribution Analysis - Violin Plots'),
         ('percentile_analysis', 'Percentile Analysis'),
-        ('process_capability', 'Process Capability Analysis'),
-        ('gradient_analysis', 'Spatial Gradient Analysis'),
-        ('control_charts', 'Statistical Process Control')
+        ('gradient_analysis', 'Spatial Gradient Analysis')
     ]
     
     for plot_key, plot_title in plot_configs:
@@ -131,7 +178,7 @@ def create_comprehensive_advanced_analysis(folder_data, figsize=(20, 24)):
     return figures
 
 
-def create_individual_plot(file_id, data, stats, filename, figsize=(8, 6), vmin=None, vmax=None, cmap='jet', colorbar=True):
+def create_individual_plot(file_id, data, stats, filename, figsize=(8.27, 11.69), vmin=None, vmax=None, cmap='jet', colorbar=True):
     """
     Create an individual plot for a single file with consistent scaling.
     
@@ -181,7 +228,7 @@ def create_individual_plot(file_id, data, stats, filename, figsize=(8, 6), vmin=
     return fig
 
 
-def create_3d_surface_plot(folder_data, figsize=(20, 15)):
+def create_3d_surface_plot(folder_data, figsize=(11.69, 8.27)):
     """
     Create 3D surface plots for all files.
     
@@ -227,7 +274,7 @@ def create_3d_surface_plot(folder_data, figsize=(20, 15)):
     return fig
 
 
-def create_statistical_comparison_plots(folder_data, figsize=(16, 12)):
+def create_statistical_comparison_plots(folder_data, figsize=(8.27, 11.69)):
     """
     분포 포함 종합 통계 비교 그래프 생성
     Create comprehensive statistical comparison plots including warpage distribution.
@@ -318,7 +365,7 @@ def create_statistical_comparison_plots(folder_data, figsize=(16, 12)):
     return fig 
 
 
-def create_mean_comparison_plot(folder_data, figsize=(10, 6)):
+def create_mean_comparison_plot(folder_data, figsize=(11.69, 8.27)):
     """
     Create a single plot showing mean warpage values with standard deviation.
     
@@ -354,7 +401,7 @@ def create_mean_comparison_plot(folder_data, figsize=(10, 6)):
     return fig
 
 
-def create_range_comparison_plot(folder_data, figsize=(10, 6)):
+def create_range_comparison_plot(folder_data, figsize=(11.69, 8.27)):
     """
     Create a single plot showing warpage range comparison.
     
@@ -389,7 +436,7 @@ def create_range_comparison_plot(folder_data, figsize=(10, 6)):
     return fig
 
 
-def create_minmax_comparison_plot(folder_data, figsize=(10, 6)):
+def create_minmax_comparison_plot(folder_data, figsize=(11.69, 8.27)):
     """
     Create a single plot showing min-max warpage values.
     
@@ -428,7 +475,7 @@ def create_minmax_comparison_plot(folder_data, figsize=(10, 6)):
     return fig
 
 
-def create_std_comparison_plot(folder_data, figsize=(10, 6)):
+def create_std_comparison_plot(folder_data, figsize=(11.69, 8.27)):
     """
     Create a single plot showing standard deviation comparison.
     
@@ -463,7 +510,7 @@ def create_std_comparison_plot(folder_data, figsize=(10, 6)):
     return fig
 
 
-def create_warpage_distribution_plot(folder_data, figsize=(10, 8)):
+def create_warpage_distribution_plot(folder_data, figsize=(11.69, 8.27)):
     """
     워페이지 매개변수 분포 그래프 생성 (max-min 값들의 히스토그램)
     Create a warpage distribution plot showing histogram of (max-min) values.
@@ -518,7 +565,7 @@ def create_warpage_distribution_plot(folder_data, figsize=(10, 8)):
     return fig
 
 
-def create_mean_range_combined_plot(folder_data, figsize=(10, 10)):
+def create_mean_range_combined_plot(folder_data, figsize=(8.27, 11.69)):
     """
     평균 및 범위 비교를 위아래 구성으로 보여주는 결합 그래프 생성
     Create a combined plot showing mean and range comparisons in up-down configuration.
@@ -576,7 +623,7 @@ def create_mean_range_combined_plot(folder_data, figsize=(10, 10)):
     return fig
 
 
-def create_minmax_std_combined_plot(folder_data, figsize=(10, 10)):
+def create_minmax_std_combined_plot(folder_data, figsize=(8.27, 11.69)):
     """
     최소-최대 및 표준편차 비교를 위아래 구성으로 보여주는 결합 그래프 생성
     Create a combined plot showing min-max and standard deviation comparisons in up-down configuration.
@@ -637,7 +684,7 @@ def create_minmax_std_combined_plot(folder_data, figsize=(10, 10)):
     return fig
 
 
-def create_web_gui_statistical_plots(folder_data, figsize=(12, 16)):
+def create_web_gui_statistical_plots(folder_data, figsize=(8.27, 11.69)):
     """
     Create statistical plots for web GUI that match the PDF export layout.
     Shows all statistical analyses in a single figure with 3 sections.
@@ -709,3 +756,353 @@ def create_web_gui_statistical_plots(folder_data, figsize=(12, 16)):
     
     plt.tight_layout()
     return fig
+
+
+# ===========================================
+# PLOTLY-BASED INTERACTIVE VISUALIZATIONS
+# ===========================================
+
+def create_plotly_individual_plot(file_id, data, stats, filename, vmin=None, vmax=None, cmap='jet'):
+    """
+    Create an interactive individual plot using Plotly.
+    
+    Args:
+        file_id (str): File identifier
+        data (numpy.ndarray): Data array
+        stats (dict): Statistics dictionary
+        filename (str): Filename for title
+        vmin, vmax (float): Color scale limits
+        cmap (str): Colormap name
+        
+    Returns:
+        plotly.graph_objects.Figure: The created interactive figure
+    """
+    # Handle NaN values
+    data_clean = np.ma.masked_invalid(data)
+    
+    # Create heatmap
+    fig = go.Figure(data=go.Heatmap(
+        z=data_clean,
+        colorscale=cmap,
+        zmin=vmin,
+        zmax=vmax,
+        colorbar=dict(
+            title="Warpage Value",
+            titleside="right"
+        ),
+        hoverongaps=False,
+        hovertemplate='X: %{x}<br>Y: %{y}<br>Value: %{z:.6f}<extra></extra>'
+    ))
+    
+    simple_file_id = file_id.replace('File_', '')
+    fig.update_layout(
+        title=f'{simple_file_id} - {filename}',
+        xaxis_title='X Position',
+        yaxis_title='Y Position',
+        width=800,
+        height=600,
+        font=dict(size=12)
+    )
+    
+    # Add statistics annotation
+    stats_text = f"Shape: {stats['shape']}<br>Min: {stats['min']:.6f}<br>Max: {stats['max']:.6f}<br>Mean: {stats['mean']:.6f}<br>Std: {stats['std']:.6f}"
+    fig.add_annotation(
+        text=stats_text,
+        xref="paper", yref="paper",
+        x=1.02, y=1,
+        showarrow=False,
+        align="left",
+        bgcolor="white",
+        bordercolor="black",
+        borderwidth=1
+    )
+    
+    return fig
+
+
+def create_plotly_comparison_plot(folder_data, vmin=None, vmax=None, cmap='jet'):
+    """
+    Create an interactive comparison plot using Plotly subplots.
+    
+    Args:
+        folder_data (dict): Dictionary with file_id as key and (data, stats, filename) as value
+        vmin, vmax (float): Color scale limits
+        cmap (str): Colormap name
+        
+    Returns:
+        plotly.graph_objects.Figure: The created interactive figure
+    """
+    n_files = len(folder_data)
+    if n_files == 0:
+        return go.Figure()
+    
+    # Create subplots
+    cols = min(4, n_files)
+    rows = (n_files + cols - 1) // cols
+    
+    subplot_titles = []
+    for file_id, (_, _, filename) in folder_data.items():
+        simple_file_id = file_id.replace('File_', '')
+        subplot_titles.append(f'{simple_file_id}<br>{filename}')
+    
+    fig = make_subplots(
+        rows=rows, cols=cols,
+        subplot_titles=subplot_titles,
+        shared_xaxes=False,
+        shared_yaxes=False,
+        horizontal_spacing=0.1,
+        vertical_spacing=0.15
+    )
+    
+    for i, (file_id, (data, stats, filename)) in enumerate(folder_data.items()):
+        row = i // cols + 1
+        col = i % cols + 1
+        
+        if data is not None:
+            data_clean = np.ma.masked_invalid(data)
+            
+            heatmap = go.Heatmap(
+                z=data_clean,
+                colorscale=cmap,
+                zmin=vmin,
+                zmax=vmax,
+                showscale=(i == 0),  # Only show colorbar for first plot
+                colorbar=dict(
+                    title="Warpage Value",
+                    x=1.02,
+                    len=0.8
+                ) if i == 0 else None,
+                hoverongaps=False,
+                hovertemplate='X: %{x}<br>Y: %{y}<br>Value: %{z:.6f}<extra></extra>'
+            )
+            
+            fig.add_trace(heatmap, row=row, col=col)
+    
+    fig.update_layout(
+        title="Warpage Data Comparison",
+        showlegend=False,
+        width=1200,
+        height=400 * rows,
+        font=dict(size=10)
+    )
+    
+    return fig
+
+
+def create_plotly_3d_surface(folder_data, cmap='viridis'):
+    """
+    Create interactive 3D surface plots using Plotly.
+    
+    Args:
+        folder_data (dict): Dictionary with file_id as key and (data, stats, filename) as value
+        cmap (str): Colormap name
+        
+    Returns:
+        plotly.graph_objects.Figure: The created interactive figure
+    """
+    n_files = len(folder_data)
+    if n_files == 0:
+        return go.Figure()
+    
+    # Create subplots for 3D
+    cols = min(2, n_files)
+    rows = (n_files + cols - 1) // cols
+    
+    subplot_titles = []
+    for file_id, (_, _, filename) in folder_data.items():
+        simple_file_id = file_id.replace('File_', '')
+        subplot_titles.append(f'{simple_file_id} - {filename}')
+    
+    specs = [[{"type": "surface"} for _ in range(cols)] for _ in range(rows)]
+    
+    fig = make_subplots(
+        rows=rows, cols=cols,
+        specs=specs,
+        subplot_titles=subplot_titles,
+        horizontal_spacing=0.05,
+        vertical_spacing=0.1
+    )
+    
+    for i, (file_id, (data, stats, filename)) in enumerate(folder_data.items()):
+        if i >= 8:  # Limit to 8 plots for performance
+            break
+            
+        row = i // cols + 1
+        col = i % cols + 1
+        
+        if data is not None:
+            rows_data, cols_data = data.shape
+            x = np.arange(cols_data)
+            y = np.arange(rows_data)
+            
+            surface = go.Surface(
+                z=data,
+                x=x,
+                y=y,
+                colorscale=cmap,
+                showscale=(i == 0),
+                hovertemplate='X: %{x}<br>Y: %{y}<br>Z: %{z:.6f}<extra></extra>'
+            )
+            
+            fig.add_trace(surface, row=row, col=col)
+    
+    fig.update_layout(
+        title="3D Surface Plots - Warpage Data",
+        width=1200,
+        height=600 * rows,
+        font=dict(size=10)
+    )
+    
+    return fig
+
+
+def create_plotly_statistical_plots(folder_data):
+    """
+    Create interactive statistical comparison plots using Plotly.
+    
+    Args:
+        folder_data (dict): Dictionary with file_id as key and (data, stats, filename) as value
+        
+    Returns:
+        plotly.graph_objects.Figure: The created interactive figure
+    """
+    if not folder_data:
+        return go.Figure()
+    
+    # Extract data
+    file_ids = list(folder_data.keys())
+    simple_file_ids = [fid.replace('File_', '') for fid in file_ids]
+    
+    means = [stats['mean'] for _, (_, stats, _) in folder_data.items()]
+    stds = [stats['std'] for _, (_, stats, _) in folder_data.items()]
+    ranges = [stats['range'] for _, (_, stats, _) in folder_data.items()]
+    mins = [stats['min'] for _, (_, stats, _) in folder_data.items()]
+    maxs = [stats['max'] for _, (_, stats, _) in folder_data.items()]
+    
+    # Create subplots
+    fig = make_subplots(
+        rows=3, cols=1,
+        subplot_titles=('Mean Warpage Values with Std Dev', 'Warpage Range Comparison', 'Min-Max Warpage Values'),
+        vertical_spacing=0.1
+    )
+    
+    # Mean with error bars
+    fig.add_trace(
+        go.Bar(
+            x=simple_file_ids,
+            y=means,
+            error_y=dict(type='data', array=stds, visible=True),
+            name='Mean ± Std',
+            marker_color='skyblue',
+            hovertemplate='File: %{x}<br>Mean: %{y:.6f}<br>Std: %{error_y.array:.6f}<extra></extra>'
+        ),
+        row=1, col=1
+    )
+    
+    # Range comparison
+    fig.add_trace(
+        go.Bar(
+            x=simple_file_ids,
+            y=ranges,
+            name='Range',
+            marker_color='orange',
+            hovertemplate='File: %{x}<br>Range: %{y:.6f}<extra></extra>'
+        ),
+        row=2, col=1
+    )
+    
+    # Min-Max comparison
+    fig.add_trace(
+        go.Scatter(
+            x=simple_file_ids,
+            y=mins,
+            mode='lines+markers',
+            name='Min',
+            line=dict(color='red', width=2),
+            marker=dict(size=8),
+            hovertemplate='File: %{x}<br>Min: %{y:.6f}<extra></extra>'
+        ),
+        row=3, col=1
+    )
+    
+    fig.add_trace(
+        go.Scatter(
+            x=simple_file_ids,
+            y=maxs,
+            mode='lines+markers',
+            name='Max',
+            line=dict(color='blue', width=2),
+            marker=dict(size=8, symbol='square'),
+            hovertemplate='File: %{x}<br>Max: %{y:.6f}<extra></extra>'
+        ),
+        row=3, col=1
+    )
+    
+    # Fill between min and max
+    fig.add_trace(
+        go.Scatter(
+            x=simple_file_ids + simple_file_ids[::-1],
+            y=mins + maxs[::-1],
+            fill='toself',
+            fillcolor='rgba(128,128,128,0.2)',
+            line=dict(color='rgba(255,255,255,0)'),
+            showlegend=False,
+            hoverinfo='skip'
+        ),
+        row=3, col=1
+    )
+    
+    fig.update_layout(
+        title="Statistical Analysis - Warpage Comparison",
+        width=1000,
+        height=1200,
+        showlegend=True
+    )
+    
+    # Update axes
+    fig.update_xaxes(title_text="Files", row=3, col=1)
+    fig.update_yaxes(title_text="Mean Warpage Value", row=1, col=1)
+    fig.update_yaxes(title_text="Warpage Range", row=2, col=1)
+    fig.update_yaxes(title_text="Warpage Value", row=3, col=1)
+    
+    return fig
+
+
+def plotly_to_static_image(fig, width=None, height=None, format='png'):
+    """
+    Convert Plotly figure to static image for PDF export.
+    
+    Args:
+        fig (plotly.graph_objects.Figure): Plotly figure
+        width (int): Image width
+        height (int): Image height
+        format (str): Image format ('png', 'jpeg', 'svg')
+        
+    Returns:
+        bytes: Image data
+    """
+    return pio.to_image(fig, format=format, width=width, height=height, engine="kaleido")
+
+
+def create_plotly_figure_for_pdf(folder_data, plot_type, **kwargs):
+    """
+    Create Plotly figures optimized for PDF export (static versions).
+    
+    Args:
+        folder_data (dict): Data for plotting
+        plot_type (str): Type of plot ('individual', 'comparison', '3d', 'statistics')
+        **kwargs: Additional arguments for specific plot types
+        
+    Returns:
+        plotly.graph_objects.Figure: Plotly figure optimized for PDF
+    """
+    if plot_type == 'individual':
+        return create_plotly_individual_plot(folder_data, **kwargs)
+    elif plot_type == 'comparison':
+        return create_plotly_comparison_plot(folder_data, **kwargs)
+    elif plot_type == '3d':
+        return create_plotly_3d_surface(folder_data, **kwargs)
+    elif plot_type == 'statistics':
+        return create_plotly_statistical_plots(folder_data)
+    else:
+        raise ValueError(f"Unknown plot type: {plot_type}")

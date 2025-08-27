@@ -117,6 +117,10 @@ report/warpage_analysis_*.pdf
 # Temporary files
 *.tmp
 *.temp
+temp/
+
+# Backup files
+*_backup.py
 
 # Data files (keep structure but ignore actual data)
 data/**/20*/*.txt
