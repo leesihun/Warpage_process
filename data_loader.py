@@ -108,8 +108,8 @@ def find_data_files(folder_path, use_original_files=True):
     
     Args:
         folder_path (str): 폴더 경로 / Path to the folder
-        use_original_files (bool): True면 원본 파일(@_ORI.txt) 찾기, False면 보정된 파일(.txt, @_ORI.txt 제외) 찾기
-                                  If True, look for original files (@_ORI.txt), if False, look for corrected files (.txt but not @_ORI.txt)
+        use_original_files (bool): True면 원본 파일들 찾기, False면 보정된 파일(.txt, 원본 파일들 제외) 찾기
+                                  If True, look for original files, if False, look for corrected files (.txt but not original files)
         
     Returns:
         list: 데이터 파일들의 전체 경로 목록, 없으면 빈 목록 / List of full paths to the data files, or empty list if none found
@@ -118,15 +118,30 @@ def find_data_files(folder_path, use_original_files=True):
         files = os.listdir(folder_path)
         
         if use_original_files:
-            # 원본 파일 찾기 / Look for original files
-            pattern = FILE_PATTERNS['original']
-            target_files = [f for f in files if f.endswith(pattern)]
+            # 원본 파일 찾기 (여러 패턴 지원) / Look for original files (multiple patterns supported)
+            patterns = FILE_PATTERNS['original']
+            target_files = []
+            for f in files:
+                for pattern in patterns:
+                    if f.endswith(pattern):
+                        target_files.append(f)
+                        break  # 한 번 매치되면 다른 패턴은 확인하지 않음
             file_type = "original"
         else:
-            # 보정된 파일 찾기 (.txt이지만 @_ORI.txt는 제외) / Look for corrected files (.txt but not @_ORI.txt)
+            # 보정된 파일 찾기 (.txt이지만 원본 파일 패턴들은 제외) / Look for corrected files (.txt but not original file patterns)
             pattern = FILE_PATTERNS['corrected']
-            original_pattern = FILE_PATTERNS['original']
-            target_files = [f for f in files if f.endswith(pattern) and not f.endswith(original_pattern)]
+            original_patterns = FILE_PATTERNS['original']
+            target_files = []
+            for f in files:
+                if f.endswith(pattern):
+                    # 원본 파일 패턴들 중 어떤 것과도 매치되지 않는지 확인
+                    is_original = False
+                    for orig_pattern in original_patterns:
+                        if f.endswith(orig_pattern):
+                            is_original = True
+                            break
+                    if not is_original:
+                        target_files.append(f)
             file_type = "corrected"
         
         if target_files:
@@ -134,10 +149,16 @@ def find_data_files(folder_path, use_original_files=True):
             target_files.sort()
             return [os.path.join(folder_path, f) for f in target_files]
         else:
-            print(f"No {file_type} files found in {folder_path}")
+            try:
+                print(f"No {file_type} files found in {folder_path}")
+            except (UnicodeEncodeError, UnicodeDecodeError):
+                print(f"No {file_type} files found in folder (unicode path)")
             return []
     except Exception as e:
-        print(f"Error accessing folder {folder_path}: {e}")
+        try:
+            print(f"Error accessing folder {folder_path}: {e}")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            print(f"Error accessing folder (unicode path): {e}")
         return []
 
 

@@ -252,7 +252,13 @@ For technical support or questions:
 
 ## 🔄 Version History
 
-### v2.0.0 (Current)
+### v2.0.1 (Current)
+- Fixed web_server.exe execution issue - now properly runs Python server directly
+- Updated port configuration to use 8080 as default
+- Improved error handling for executable vs Python script execution
+- Enhanced debugging and logging capabilities
+
+### v2.0.0
 - Complete rewrite with modern architecture
 - Web-based interface with responsive design
 - Advanced statistical analysis

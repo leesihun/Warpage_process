@@ -15,7 +15,7 @@ from flask import Flask, render_template, request, jsonify, send_file
 from flask_cors import CORS
 
 # Import analysis components
-from config import DEFAULT_CONFIG
+from config import DEFAULT_CONFIG, WEB_PORT, get_data_dir
 from data_loader import process_folder_data, find_data_files
 from warpage_statistics import calculate_statistics
 import visualization
@@ -47,21 +47,35 @@ def has_data_files_recursive(directory_path, max_depth=3, current_depth=0):
         
     try:
         # First check the current directory for data files
-        if find_data_files(directory_path, True) or find_data_files(directory_path, False):
+        original_files = find_data_files(directory_path, True)
+        corrected_files = find_data_files(directory_path, False)
+        if original_files or corrected_files:
             return True
             
         # Then check all subdirectories recursively
-        for item in os.listdir(directory_path):
-            item_path = os.path.join(directory_path, item)
-            if os.path.isdir(item_path) and not item.startswith('.'):
-                if has_data_files_recursive(item_path, max_depth, current_depth + 1):
-                    return True
+        try:
+            items = os.listdir(directory_path)
+        except (OSError, IOError, PermissionError):
+            return False
+            
+        for item in items:
+            try:
+                item_path = os.path.join(directory_path, item)
+                if os.path.isdir(item_path) and not item.startswith('.'):
+                    if has_data_files_recursive(item_path, max_depth, current_depth + 1):
+                        return True
+            except (OSError, IOError, PermissionError, UnicodeDecodeError, UnicodeEncodeError):
+                # Skip problematic items but continue with others
+                continue
                     
         return False
         
-    except (OSError, IOError, PermissionError) as e:
+    except (OSError, IOError, PermissionError, UnicodeDecodeError, UnicodeEncodeError) as e:
         # Handle permission errors or other file system issues gracefully
-        print(f"Warning: Could not access directory {directory_path}: {e}")
+        try:
+            print(f"Warning: Could not access directory {directory_path}: {e}")
+        except (UnicodeDecodeError, UnicodeEncodeError):
+            print(f"Warning: Could not access directory (unicode path): {e}")
         return False
 
 @app.route('/')
@@ -74,27 +88,107 @@ def get_folders():
     """Get available data folders"""
     try:
         config = DEFAULT_CONFIG.copy()
-        data_dir = config.get('data_dir', 'data')
+        # Always resolve data dir at runtime to avoid stale config issues
+        data_dir = get_data_dir()
+        
+        # Ensure we have the absolute path
+        if not os.path.isabs(data_dir):
+            data_dir = os.path.join(os.getcwd(), data_dir)
+        
+        # Debug information (console and file)
+        debug_lines = []
+        debug_lines.append(f"data_dir = {data_dir}")
+        debug_lines.append(f"data_dir exists = {os.path.exists(data_dir)}")
+        debug_lines.append(f"cwd = {os.getcwd()}")
+        if hasattr(__import__('sys'), '_MEIPASS'):
+            debug_lines.append(f"_MEIPASS = {__import__('sys')._MEIPASS}")
+        for line in debug_lines:
+            try:
+                print(f"DEBUG: {line}")
+            except Exception:
+                pass
+        try:
+            with open('server_debug.log', 'a', encoding='utf-8') as lf:
+                lf.write("[GET /api/folders]\n" + "\n".join(debug_lines) + "\n")
+        except Exception:
+            pass
         
         # Scan data directory for folders
         folders = []
         if os.path.exists(data_dir):
-            for item in os.listdir(data_dir):
-                item_path = os.path.join(data_dir, item)
-                if os.path.isdir(item_path) and not item.startswith('.'):
-                    # Check if folder contains data files (recursively check subdirectories)
-                    try:
+            print(f"DEBUG: Scanning directory: {data_dir}")
+            try:
+                items = os.listdir(data_dir)
+            except (OSError, IOError, PermissionError) as e:
+                print(f"DEBUG: Could not list directory {data_dir}: {e}")
+                return jsonify({'error': f'Could not access data directory: {str(e)}'}), 500
+                
+            for item in items:
+                try:
+                    item_path = os.path.join(data_dir, item)
+                    if os.path.isdir(item_path) and not item.startswith('.'):
+                        # Check if folder contains data files (recursively check subdirectories)
                         if has_data_files_recursive(item_path):
                             folders.append(item)
-                    except Exception as e:
-                        # Skip problematic folders but log the issue
+                            print(f"DEBUG: Added folder {item} to list")
+                        else:
+                            print(f"DEBUG: Folder {item} has no data files")
+                except Exception as e:
+                    # Skip problematic folders but log the issue
+                    try:
                         print(f"Warning: Could not scan folder {item}: {e}")
-                        continue
+                    except (UnicodeDecodeError, UnicodeEncodeError):
+                        print(f"Warning: Could not scan folder (unicode error): {e}")
+                    continue
+            try:
+                with open('server_debug.log', 'a', encoding='utf-8') as lf:
+                    lf.write(f"folders_found = {folders}\n")
+            except Exception:
+                pass
         
         folders.sort()
         return jsonify({
             'folders': folders,
-            'data_directory': data_dir
+            'data_directory': data_dir  # This is now the resolved absolute path
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/debug')
+def debug_info():
+    """Return diagnostics about server paths and folder scan."""
+    try:
+        data_dir = get_data_dir()
+        cwd = os.getcwd()
+        exists = os.path.exists(data_dir)
+        items = []
+        scan = []
+        if exists:
+            try:
+                items = os.listdir(data_dir)
+            except Exception as e:
+                items = [f"<error listing data_dir: {e}>"]
+            for item in items:
+                item_path = os.path.join(data_dir, item)
+                is_dir = os.path.isdir(item_path)
+                has_files = False
+                if is_dir:
+                    try:
+                        has_files = has_data_files_recursive(item_path)
+                    except Exception as e:
+                        has_files = f"<error: {e}>"
+                scan.append({
+                    'name': item,
+                    'path': item_path,
+                    'is_dir': bool(is_dir),
+                    'has_data_files': has_files
+                })
+        return jsonify({
+            'data_directory': data_dir,
+            'data_dir_exists': exists,
+            'cwd': cwd,
+            'items': items,
+            'scan': scan
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -126,8 +220,8 @@ def analyze():
         if vmax is not None:
             config['vmax'] = vmax
         
-        # Load data  
-        data_dir = config.get('data_dir', 'data')
+        # Load data using resolved data directory
+        data_dir = get_data_dir()
         folder_results = process_folder_data(data_dir, folder, row_fraction, col_fraction, use_original)
         if not folder_results:
             return jsonify({'error': f'No data found in folder: {folder}'}), 400
@@ -551,18 +645,18 @@ def open_browser():
     """Open browser after server starts"""
     time.sleep(2)  # Wait for server to start
     try:
-        webbrowser.open('http://localhost:8080')
-        print("✓ Browser opened to http://localhost:8080")
+        webbrowser.open(f'http://localhost:{WEB_PORT}')
+        print(f"✓ Browser opened to http://localhost:{WEB_PORT}")
     except Exception as e:
         print(f"Could not open browser: {e}")
-        print("Please manually open: http://localhost:8080")
+        print(f"Please manually open: http://localhost:{WEB_PORT}")
 
 if __name__ == '__main__':
     print("=" * 60)
     print("PEMTRON Warpage Analysis Tool - Web Interface")
     print("=" * 60)
     print()
-    print("Starting server on http://localhost:8080")
+    print(f"Starting server on http://localhost:{WEB_PORT}")
     print("Press Ctrl+C to stop")
     print()
     
@@ -572,7 +666,7 @@ if __name__ == '__main__':
         browser_thread.start()
     
     try:
-        app.run(host='0.0.0.0', port=8080, debug=True, use_reloader=False)
+        app.run(host='0.0.0.0', port=WEB_PORT, debug=True, use_reloader=False)
     except KeyboardInterrupt:
         print("\n✓ Server stopped")
     except Exception as e:

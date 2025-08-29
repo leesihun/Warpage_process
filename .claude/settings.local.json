@@ -16,7 +16,9 @@
       "Bash(PEMTRON_Warpage_Analyzer.exe)",
       "Bash(\"./PEMTRON_Warpage_Analyzer.exe\")",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(taskkill:*)",
+      "Bash(del:*)"
     ],
     "deny": []
   }

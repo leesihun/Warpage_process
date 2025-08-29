@@ -4,9 +4,48 @@ Warpage Analyzer용 설정 구성
 Configuration settings for Warpage Analyzer
 """
 
+import os
+import sys
+
+def get_resource_path(relative_path):
+    """Get absolute path to resource, works for dev and for PyInstaller"""
+    if hasattr(sys, '_MEIPASS'):
+        # Running as PyInstaller executable
+        base_path = sys._MEIPASS
+    else:
+        # Running in development
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    
+    return os.path.join(base_path, relative_path)
+
+def get_data_dir():
+    """Get the data directory path, handling both development and executable modes"""
+    if hasattr(sys, '_MEIPASS'):
+        # In PyInstaller executable, try multiple possible data folder locations
+        exe_dir = os.path.dirname(sys.executable)
+        possible_paths = [
+            os.path.join(exe_dir, 'data'),  # Next to exe
+            os.path.join(os.getcwd(), 'data'),  # In current working directory
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')  # Fallback to script directory
+        ]
+        
+        # Return the first existing data directory
+        for path in possible_paths:
+            if os.path.exists(path) and os.path.isdir(path):
+                print(f"DEBUG: Found data directory at: {path}")
+                return path
+        
+        # If none found, return the first option (next to exe) and let the app handle the error
+        print(f"DEBUG: No data directory found, using default: {possible_paths[0]}")
+        return possible_paths[0]
+    else:
+        # In development, use relative path
+        return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+
 # 기본 설정 구성 / Default configuration settings
 DEFAULT_CONFIG = {
-    "base_path": "./data/",                    # 데이터 폴더 기본 경로 / Base path to data folders
+    "base_path": get_data_dir(),               # 데이터 폴더 기본 경로 / Base path to data folders
+    "data_dir": get_data_dir(),                # 웹서버용 데이터 디렉토리 / Data directory for web server
     "folders": ["20250716"],                   # 분석할 폴더들 / Folders to analyze
     "vmin": None,                              # 색상 스케일 최솏값 (None = 자동) / Min value for color scale (None = auto)
     "vmax": None,                              # 색상 스케일 최댓값 (None = 자동) / Max value for color scale (None = auto)
@@ -24,18 +63,18 @@ DEFAULT_CONFIG = {
 }
 
 # 디렉토리 설정 / Directory settings
-DATA_DIR = './data/'     # 데이터 디렉토리 / Data directory
-REPORT_DIR = 'report'    # 보고서 디렉토리 / Report directory
+DATA_DIR = get_data_dir()     # 데이터 디렉토리 / Data directory
+REPORT_DIR = get_resource_path('report')    # 보고서 디렉토리 / Report directory
 
 # 웹 GUI 설정 / Web GUI settings
 WEB_PORT = 8080          # 웹 서버 포트 / Web server port
 WEB_HOST = '0.0.0.0'     # 웹 서버 호스트 / Web server host
 WEB_DEBUG = True         # 웹 디버그 모드 / Web debug mode
 
-# 파일 패턴 / File patterns
+# 파일 패턴 / File patterns  
 FILE_PATTERNS = {
-    'original': '_ORI.txt',     # 원본 파일 패턴 / Original files pattern
-    'corrected': '_ORI_A.txt'         # 보정된 파일 패턴 (@_ORI.txt 제외) / Corrected files pattern (excluding @_ORI.txt)
+    'original': ['_ORI.txt', '@_ORI.txt', '_ORI_A.txt', '@_ORI_A.txt'],     # 원본 파일 패턴들 / Original files patterns (multiple variations)
+    'corrected': '.txt'         # 보정된 파일 패턴 (원본 파일들 제외) / Corrected files pattern (excluding original files)
 }
 
 # 배치 처리 설정 / Batch processing settings
