@@ -14,7 +14,9 @@
       "Bash(pkill:*)",
       "Bash(pyinstaller:*)",
       "Bash(PEMTRON_Warpage_Analyzer.exe)",
-      "Bash(\"./PEMTRON_Warpage_Analyzer.exe\")"
+      "Bash(\"./PEMTRON_Warpage_Analyzer.exe\")",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": []
   }
