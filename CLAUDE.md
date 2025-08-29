@@ -1,310 +1,294 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+# PEMTRON Warpage Analysis Tool - Technical Documentation
 
 ## Project Overview
 
-This is the **PEMTRON Warpage Analysis Tool v2.0** - a modern, comprehensive solution for analyzing semiconductor warpage measurement data. The application features a complete rewrite with clean architecture, web-based interface, and advanced visualization capabilities.
+The PEMTRON Warpage Analysis Tool is a comprehensive Python-based application designed for analyzing semiconductor warpage measurement data. This tool provides both web-based GUI and command-line interfaces for processing, visualizing, and exporting warpage analysis results.
 
-### Architecture Philosophy
+## Architecture
 
-The codebase follows modern software engineering principles:
+### Core Components
 
-- **Clean Architecture**: Clear separation of concerns with distinct layers
-- **Modular Design**: Components can be developed, tested, and maintained independently
-- **Configuration-Driven**: Centralized configuration management with validation
-- **Error Handling**: Comprehensive exception handling with custom error types
-- **Extensibility**: Easy to add new analysis types, visualizations, and data formats
-- **Type Safety**: Proper type hints and validation throughout the codebase
-
-## Core Architecture
-
-### 1. Core Layer (`core/`)
-The foundation of the application containing all business logic:
-
-- **`config.py`**: Configuration management with dataclasses and validation
-- **`data_processor.py`**: Data loading, cleaning, and preprocessing
-- **`statistics.py`**: Statistical analysis engine with comprehensive calculations
-- **`analyzer.py`**: Main orchestrator that coordinates the entire analysis workflow
-- **`exceptions.py`**: Custom exception hierarchy for specific error handling
-
-### 2. Visualization Layer (`visualization/`)
-Handles all plot generation and export functionality:
-
-- **`plotter.py`**: Plot generation using matplotlib and plotly
-- **`renderer.py`**: Plot rendering and format conversion
-- **`exporters.py`**: PDF and image export with professional reporting
-
-### 3. Web Layer (`web/`)
-Modern Flask-based web interface:
-
-- **`app.py`**: Flask application factory with proper configuration
-- **`routes.py`**: Page routes for HTML rendering
-- **`api.py`**: RESTful API endpoints for frontend communication
-- **`templates/`**: Jinja2 templates with Bootstrap 5 styling
-- **`static/`**: CSS, JavaScript, and asset files
-
-## Key Design Patterns
-
-### 1. Configuration Management
-Uses dataclasses for type-safe, validated configuration:
-
-```python
-@dataclass
-class VisualizationConfig:
-    colormap: str = 'jet'
-    dpi: int = 150
-    figure_size: tuple = (10, 8)
-    include_3d: bool = True
-    # ... with validation in __post_init__
+```
+PEMTRON_warpage/
+├── web_server.py           # Flask web application server
+├── config.py              # Configuration management
+├── data_loader.py         # Data file processing and loading
+├── warpage_statistics.py  # Statistical calculations
+├── visualization.py       # Plot generation and rendering
+├── pdf_exporter.py        # PDF report generation
+├── advanced_statistics.py # Advanced statistical analysis
+└── templates/             # Web interface templates
+    └── index.html         # Main web interface
 ```
 
-### 2. Error Handling
-Custom exception hierarchy provides specific error types:
+### Data Flow
+
+1. **Data Input**: Raw measurement files (.txt, .ptr formats)
+2. **Processing**: Artifact removal, zero-padding cleanup, region extraction
+3. **Analysis**: Statistical calculations (mean, std, range, skewness, kurtosis)
+4. **Visualization**: 2D heatmaps, 3D surfaces, comparison plots
+5. **Export**: PDF reports, individual plot images
+
+## Technical Specifications
+
+### Supported File Formats
+
+- **Original Files**: `*@_ORI.txt`, `*_ORI_A.txt` - Raw measurement data
+- **Corrected Files**: `*.txt` (excluding original patterns) - Processed data
+- **Binary Files**: `*.ptr` - Binary measurement format (future support)
+
+### Data Processing Pipeline
 
 ```python
-class WarpageAnalysisError(Exception): pass
-class DataLoadError(WarpageAnalysisError): pass
-class DataProcessingError(WarpageAnalysisError): pass
+Raw Data → Artifact Removal → Zero Padding Cleanup → Region Extraction → Statistical Analysis → Visualization
 ```
 
-### 3. Data Containers
-Structured data containers for type safety and clarity:
+#### Artifact Removal
+- Removes common artifact values: -4000, ±9999, ±99999
+- Configurable through `DEFAULT_CONFIG['remove_artifacts']`
 
+#### Region Extraction
+- Extracts center regions using row_fraction and col_fraction
+- Preserves data integrity while focusing on relevant measurement areas
+
+### Web Server Architecture
+
+#### Flask Application Structure
 ```python
-@dataclass
-class MeasurementData:
-    data: np.ndarray
-    filename: str
-    original_shape: Tuple[int, int]
-    processed_shape: Tuple[int, int]
+app = Flask(__name__)
+CORS(app)  # Enable cross-origin requests
+
+# Global state management
+current_data = None      # Processed measurement data
+current_plots = None     # Generated plot images (base64)
+current_stats = None     # Statistical results
 ```
 
-### 4. Factory Pattern
-Flask application factory for proper initialization:
+#### API Endpoints
 
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/` | GET | Main web interface |
+| `/api/folders` | GET | List available data folders |
+| `/api/analyze` | POST | Process selected folder |
+| `/api/plot/<file_id>` | GET | Get individual plot |
+| `/api/stats_plot` | GET | Get statistical comparison plot |
+| `/api/3d_plot` | GET | Get 3D surface plot |
+| `/api/export_pdf` | GET/POST | Export PDF report |
+| `/api/status` | GET | Server health check |
+| `/api/debug` | GET | Diagnostic information |
+
+### Configuration System
+
+#### Default Configuration
 ```python
-def create_app(config: Config = None) -> Flask:
-    app = Flask(__name__)
-    # Configure app with provided config
-    return app
+DEFAULT_CONFIG = {
+    "base_path": get_data_dir(),
+    "vmin": None,                    # Auto color scaling
+    "vmax": None,
+    "cmap": "jet",                   # Colormap selection
+    "row_fraction": 1,               # Region extraction
+    "col_fraction": 1,
+    "use_original_files": True,      # File type preference
+    "dpi": 150,                      # Export quality
+    "include_stats": True,           # Statistical plots
+    "include_3d": True,              # 3D visualizations
+    "include_advanced": False        # Advanced analysis
+}
 ```
 
-## Development Workflow
+#### Dynamic Configuration
+- Runtime path resolution for executable and development modes
+- Automatic data directory detection
+- PyInstaller compatibility
 
-### Adding New Features
+### Data Processing Details
 
-1. **Core Functionality**: Add business logic to appropriate core modules
-2. **Visualization**: Extend plotter with new plot types if needed
-3. **API**: Add REST endpoints in `web/api.py` for web interface integration
-4. **Frontend**: Update templates and JavaScript for user interface
-5. **Configuration**: Add new settings to config dataclasses
-6. **Tests**: Write comprehensive tests for new functionality
+#### File Discovery Algorithm
+```python
+def find_data_files(directory, use_original=True):
+    """
+    Recursively scan directory for measurement files
+    Priority: Original files > Corrected files
+    """
+    if use_original:
+        patterns = ['_ORI.txt', '@_ORI.txt', '_ORI_A.txt']
+    else:
+        patterns = ['.txt']  # Exclude original files
+    
+    return matching_files
+```
 
-### Code Style Guidelines
+#### Statistical Calculations
+```python
+stats = {
+    'shape': data.shape,
+    'min': np.nanmin(data),
+    'max': np.nanmax(data),
+    'mean': np.nanmean(data),
+    'std': np.nanstd(data),
+    'range': max - min,
+    'skewness': scipy.stats.skew(data, nan_policy='omit'),
+    'kurtosis': scipy.stats.kurtosis(data, nan_policy='omit')
+}
+```
 
-- **Type Hints**: All functions should have proper type annotations
-- **Docstrings**: Use Google-style docstrings for all public methods
-- **Error Handling**: Use specific exception types, not generic Exception
-- **Logging**: Use structured logging with appropriate levels
-- **Configuration**: All settings should be configurable, not hardcoded
-- **Validation**: Validate inputs at boundaries (API, file loading, etc.)
+### Visualization System
 
-## Common Operations
+#### Plot Types
+1. **Individual Heatmaps**: Color-coded warpage visualization
+2. **3D Surface Plots**: Interactive 3D representations
+3. **Comparison Plots**: Side-by-side multi-file analysis
+4. **Statistical Charts**: Mean, std, range comparisons
+5. **Distribution Plots**: Histogram and density analysis
 
-### Running the Application
+#### Matplotlib Configuration
+```python
+matplotlib.use('Agg')  # Non-interactive backend
+plt.style.use('default')
+fig.tight_layout()
+```
 
+#### Base64 Encoding
+```python
+def figure_to_base64(fig):
+    """Convert matplotlib figure to base64 string for web display"""
+    buffer = io.BytesIO()
+    fig.savefig(buffer, format='png', dpi=150, bbox_inches='tight')
+    buffer.seek(0)
+    image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+    plt.close(fig)
+    return image_base64
+```
+
+### Error Handling Strategy
+
+#### Graceful Degradation
+- Continue processing if individual files fail
+- Provide meaningful error messages
+- Log detailed error information for debugging
+
+#### Common Error Scenarios
+1. **File Access Errors**: Permission denied, file not found
+2. **Data Format Errors**: Invalid file format, corrupted data
+3. **Memory Errors**: Large dataset handling
+4. **Visualization Errors**: Plot generation failures
+
+### Performance Considerations
+
+#### Memory Management
+- Process files individually to minimize memory footprint
+- Close matplotlib figures after base64 conversion
+- Use generators for large dataset iteration
+
+#### Optimization Strategies
+- Lazy loading of visualization modules
+- Configurable DPI settings for export quality vs. speed
+- Optional advanced analysis to reduce computation time
+
+### Deployment Options
+
+#### Development Mode
 ```bash
-# Web interface (primary method)
-python main.py
-
-# Command line interface
-python main.py --cli --directory ./data/sample
-
-# Development mode
-python main.py --debug --port 8090
+python web_server.py
 ```
 
-### Development Setup
-
+#### Executable Build
 ```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Run tests
-pytest
-
-# Code formatting
-black .
-
-# Linting
-flake8 .
+python -m PyInstaller web_server.spec --clean
 ```
 
-### Adding New Analysis Types
+#### Configuration for Executable
+- Data directory resolution using `sys._MEIPASS`
+- Resource path handling for templates and static files
+- Dependency bundling with PyInstaller spec file
 
-1. Extend `StatisticsEngine` with new calculation methods
-2. Add configuration options to `Config` classes
-3. Update `WarpageAnalyzer` to orchestrate new analysis
-4. Add visualization support in `PlotGenerator`
-5. Expose via API endpoints if needed
+### Testing Strategy
 
-### Adding New Visualization Types
+#### Unit Testing Areas
+- Data loading and processing functions
+- Statistical calculation accuracy
+- File format detection
+- Configuration management
 
-1. Add plot generation method to `PlotGenerator`
-2. Update `PlotRenderer` if new format conversion needed
-3. Add export support in `PDFExporter`
-4. Update web interface to display new plots
-5. Add configuration options for customization
+#### Integration Testing
+- Web server endpoint functionality
+- Complete analysis workflow
+- PDF export generation
+- Error handling scenarios
 
-## File Processing Pipeline
+### Security Considerations
 
-The data processing follows a clear pipeline:
+#### Web Server Security
+- CORS enabled for development (restrict in production)
+- Input validation for file paths and parameters
+- Temporary file cleanup after processing
 
-1. **File Discovery**: `DataProcessor.find_files()` locates measurement files
-2. **Data Loading**: `DataProcessor.load_file()` reads and parses data
-3. **Data Cleaning**: Remove artifacts, zero padding, extract regions
-4. **Statistical Analysis**: `StatisticsEngine.calculate_summary()` computes statistics
-5. **Visualization**: `PlotGenerator` creates various plot types
-6. **Export**: `PDFExporter` generates comprehensive reports
+#### File System Access
+- Restricted to configured data directories
+- Path traversal protection
+- Safe file name handling
 
-## Web Interface Architecture
+### Logging and Debugging
 
-### Frontend Stack
-- **Bootstrap 5**: Modern, responsive UI framework
-- **jQuery**: DOM manipulation and AJAX requests
-- **Plotly.js**: Interactive visualizations
-- **Font Awesome**: Icons and visual elements
+#### Debug Information
+- Server startup diagnostics
+- File discovery process logging
+- Analysis progress tracking
+- Error stack traces
 
-### Backend API
-- **RESTful Design**: Standard HTTP methods and status codes
-- **JSON Communication**: Structured data exchange
-- **Error Handling**: Consistent error response format
-- **File Handling**: Support for file uploads and downloads
+#### Log Files
+- `server_debug.log`: Runtime diagnostics
+- Console output: Real-time status updates
 
-### State Management
-- **Application State**: Managed in JavaScript AppState object
-- **Session State**: Analysis results stored in Flask app context
-- **Configuration**: Centralized config object shared across components
+### Future Enhancements
 
-## Testing Strategy
+#### Planned Features
+- Real-time data streaming support
+- Machine learning integration for anomaly detection
+- Advanced statistical models
+- Multi-language support
+- Cloud deployment options
 
-### Unit Tests
-- **Core Logic**: Test data processing, statistics, and analysis
-- **Validation**: Test configuration validation and error handling
-- **Utilities**: Test helper functions and utilities
+#### Technical Improvements
+- Database integration for result storage
+- Caching system for improved performance
+- Asynchronous processing for large datasets
+- REST API versioning
 
-### Integration Tests
-- **API Endpoints**: Test REST API functionality
-- **File Processing**: Test end-to-end file processing pipeline
-- **Export**: Test PDF and image export functionality
+### Dependencies
 
-### Test Data
-- **Sample Files**: Representative measurement data files
-- **Edge Cases**: Files with artifacts, empty data, malformed content
-- **Performance**: Large files for performance testing
-
-## Configuration System
-
-### Hierarchical Configuration
-The configuration system uses nested dataclasses for organization:
-
-```python
-config = Config()
-config.visualization.colormap = 'viridis'
-config.processing.remove_artifacts = True
-config.server.port = 8080
+#### Core Dependencies
+```
+numpy>=1.21.0          # Numerical computation
+scipy>=1.7.0           # Statistical functions
+matplotlib>=3.5.0      # Plotting and visualization
+Flask>=2.0.0           # Web framework
+Flask-CORS>=3.0.0      # Cross-origin support
+reportlab>=3.6.0       # PDF generation
 ```
 
-### Environment Support
-Configuration can be loaded from:
-- Default values in dataclasses
-- Dictionary updates via `Config.from_dict()`
-- Runtime updates via `WarpageAnalyzer.update_config()`
+#### Optional Dependencies
+```
+plotly>=5.0.0          # Interactive visualizations
+scikit-learn>=1.0.0    # Advanced analysis
+pandas>=1.3.0          # Data manipulation
+kaleido>=0.2.1         # Plot export support
+```
 
-### Validation
-All configuration classes validate their settings in `__post_init__()`:
-- Range checks for numerical values
-- Existence checks for file paths
-- Format validation for strings
+### Build and Distribution
 
-## Performance Considerations
+#### PyInstaller Configuration
+- Single-file executable generation
+- Data file inclusion (templates, config)
+- Hidden import detection
+- Cross-platform compatibility
 
-### Memory Management
-- **Lazy Loading**: Load data only when needed
-- **Memory Cleanup**: Explicitly close matplotlib figures
-- **Batch Processing**: Process files in configurable batch sizes
+#### Deployment Checklist
+1. Install dependencies: `pip install -r requirements.txt`
+2. Test functionality: `python web_server.py`
+3. Build executable: `python -m PyInstaller web_server.spec`
+4. Test executable: `./dist/web_server.exe`
+5. Distribute with data directory
 
-### Processing Optimization
-- **Parallel Processing**: Use ThreadPoolExecutor for file processing
-- **Caching**: Cache expensive calculations when possible
-- **Progress Tracking**: Provide user feedback for long operations
-
-### Web Interface Performance
-- **Async Operations**: Use AJAX for non-blocking operations
-- **Image Optimization**: Use appropriate DPI settings
-- **Progressive Loading**: Load results incrementally
-
-## Error Handling Philosophy
-
-### Defensive Programming
-- **Input Validation**: Validate all inputs at boundaries
-- **Graceful Degradation**: Continue processing when possible
-- **User-Friendly Messages**: Provide clear error messages to users
-- **Detailed Logging**: Log technical details for debugging
-
-### Error Recovery
-- **File Processing**: Skip corrupted files, continue with others
-- **Visualization**: Generate available plots even if some fail
-- **Web Interface**: Handle API failures gracefully with user feedback
-
-## Extension Points
-
-### Adding New Data Formats
-1. Extend `DataProcessor._read_text_file()` for new parsers
-2. Add format detection logic
-3. Update file pattern configuration
-4. Add validation for new format
-
-### Custom Analysis Methods
-1. Add methods to `StatisticsEngine`
-2. Update `StatisticalSummary` dataclass if needed
-3. Add configuration options
-4. Extend visualization if needed
-
-### New Visualization Backends
-1. Create new plotter class similar to `PlotGenerator`
-2. Implement renderer for format conversion
-3. Add export support
-4. Update web interface integration
-
-## Security Considerations
-
-### File Handling
-- **Path Validation**: Use `secure_filename()` for uploads
-- **Size Limits**: Enforce file size limits
-- **Type Checking**: Validate file extensions and content
-- **Temporary Files**: Clean up temporary files properly
-
-### Web Interface
-- **CORS Configuration**: Properly configured CORS headers
-- **Input Validation**: Validate all API inputs
-- **Error Information**: Don't expose sensitive information in errors
-- **File Permissions**: Proper file system permissions
-
-## Deployment Considerations
-
-### Production Setup
-- **Configuration**: Use environment-specific configs
-- **Logging**: Configure appropriate log levels and rotation
-- **Error Handling**: Set up error monitoring
-- **Performance**: Configure for expected load
-
-### Environment Variables
-Key settings that should be configurable in deployment:
-- `WARPAGE_DATA_DIR`: Data directory path
-- `WARPAGE_OUTPUT_DIR`: Output directory path
-- `WARPAGE_SERVER_PORT`: Web server port
-- `WARPAGE_DEBUG`: Debug mode flag
-
-This documentation should help you understand the codebase architecture and make appropriate modifications while maintaining the design principles and code quality standards.
+This documentation provides a comprehensive technical overview of the PEMTRON Warpage Analysis Tool architecture, implementation details, and operational considerations.

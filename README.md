@@ -1,307 +1,674 @@
-# PEMTRON Warpage Analysis Tool v2.0
+# PEMTRON Warpage Analysis Tool
 
-A modern, comprehensive tool for analyzing semiconductor warpage measurement data. Built with a clean architecture, web-based interface, and advanced visualization capabilities.
+A powerful, user-friendly application for analyzing semiconductor warpage measurement data with advanced visualization and reporting capabilities.
 
-## 🚀 Features
+![Version](https://img.shields.io/badge/version-2.0.1-blue.svg)
+![Python](https://img.shields.io/badge/python-3.8+-green.svg)
+![License](https://img.shields.io/badge/license-Proprietary-red.svg)
 
-### Core Capabilities
-- **Multi-format Support**: Process .txt and .ptr measurement files
-- **Smart Data Processing**: Automatic artifact removal and zero-padding cleanup
-- **Statistical Analysis**: Comprehensive statistical calculations including mean, std, range, skewness, kurtosis
-- **Advanced Visualizations**: 2D heatmaps, 3D surface plots, comparison charts, statistical plots
-- **Web Interface**: Modern, responsive web-based GUI with real-time updates
-- **Command Line Support**: Full CLI interface for automation and batch processing
-- **PDF Reports**: Professional PDF reports with plots and statistics
-- **Batch Processing**: Analyze multiple files and directories efficiently
+## 🎯 What This Tool Does
 
-### Visualization Types
-- **Individual Heatmaps**: Color-coded warpage visualization for each measurement
-- **3D Surface Plots**: Interactive 3D surface representations
-- **Comparison Plots**: Side-by-side analysis of multiple measurements
-- **Statistical Charts**: Mean, standard deviation, range, and distribution comparisons
-- **Interactive Plots**: Plotly-powered interactive visualizations
+The PEMTRON Warpage Analysis Tool helps semiconductor engineers and technicians:
 
-### Technical Features
-- **Clean Architecture**: Modular design with separation of concerns
-- **Configurable Processing**: Customizable artifact removal, region extraction, and color scaling
-- **Real-time Updates**: Live parameter adjustments and plot updates
-- **Error Handling**: Comprehensive error handling and validation
-- **Logging**: Detailed logging for debugging and monitoring
-- **Extensible Design**: Easy to add new analysis types and visualization methods
+- **Analyze warpage measurements** from various file formats (.txt, .ptr)
+- **Visualize data** with colorful heatmaps and 3D surface plots
+- **Compare multiple measurements** side-by-side
+- **Generate professional reports** in PDF format
+- **Access data through a modern web interface** - no complex software installation needed
 
-## 📦 Installation
+## 🚀 Quick Start
 
-### Requirements
-- Python 3.8 or higher
-- 2GB RAM minimum (4GB recommended)
-- 1GB free disk space
+### Option 1: Run the Executable (Easiest)
+1. Download the `web_server.exe` file
+2. Double-click to run it
+3. Your web browser will automatically open to `http://localhost:8080`
+4. Start analyzing your data!
 
-### Quick Start
+### Option 2: Run from Python Source
 ```bash
-# Clone or download the repository
+# Navigate to the project folder
 cd PEMTRON_warpage
 
-# Install dependencies
+# Install required packages
 pip install -r requirements.txt
 
-# Run the application
-python main.py
+# Start the application
+python web_server.py
 ```
 
-The web interface will automatically open at `http://localhost:8080`
+The web interface will open automatically in your default browser.
 
-### Development Installation
+## 📊 How to Use
+
+### Step 1: Prepare Your Data
+Place your measurement files in the `data` folder:
+```
+data/
+├── your_project_folder/
+│   ├── measurement1.txt
+│   ├── measurement2@_ORI.txt
+│   └── measurement3_ORI_A.txt
+```
+
+### Step 2: Select Your Data
+1. Open the web interface
+2. Choose your data folder from the dropdown menu
+3. Select file type (Original or Corrected files)
+
+### Step 3: Configure Analysis
+- **Colormap**: Choose colors for your plots (jet, viridis, plasma, etc.)
+- **Region**: Select what portion of the data to analyze
+- **Color Scale**: Set min/max values or use automatic scaling
+
+### Step 4: Run Analysis
+Click "Analyze" and watch as the tool:
+- Processes your measurement files
+- Generates beautiful visualizations
+- Calculates comprehensive statistics
+
+### Step 5: View Results
+Browse through different types of plots:
+- **Individual plots** for each measurement
+- **3D surface plots** for detailed visualization
+- **Comparison charts** showing statistical differences
+- **Advanced analysis** with distribution plots
+
+### Step 6: Export Results
+Generate a professional PDF report containing all plots and statistics.
+
+## 📁 Supported File Formats
+
+| File Type | Description | Example |
+|-----------|-------------|---------|
+| Original Files | Raw measurement data | `data@_ORI.txt`, `sample_ORI_A.txt` |
+| Corrected Files | Processed measurement data | `measurement.txt` |
+| Binary Files | Binary format (future support) | `data.ptr` |
+
+## 🎨 Visualization Features
+
+### 2D Heatmaps
+- Color-coded warpage visualization
+- Customizable color scales and maps
+- Statistical overlays (min, max, mean values)
+
+### 3D Surface Plots
+- Interactive 3D representations
+- Rotate and zoom capabilities
+- Professional rendering quality
+
+### Comparison Analysis
+- Side-by-side plot comparisons
+- Statistical difference highlighting
+- Multi-file analysis support
+
+### Advanced Statistics
+- Mean and standard deviation analysis
+- Range and distribution plots
+- Skewness and kurtosis calculations
+
+## ⚙️ Configuration Options
+
+### Basic Settings
+- **Port**: Web server port (default: 8080)
+- **Auto-open browser**: Automatically open web interface
+- **File type preference**: Original vs corrected files
+
+### Analysis Settings
+- **Artifact removal**: Remove common measurement artifacts
+- **Region extraction**: Focus on specific measurement areas
+- **Statistical calculations**: Choose which statistics to compute
+
+### Export Settings
+- **PDF quality**: Set DPI for exported reports
+- **Plot inclusion**: Choose which plots to include
+- **Report format**: Customize report layout
+
+## 🔧 Troubleshooting
+
+### Common Issues
+
+**Problem**: "No folders found" message
+**Solution**: 
+- Check that your data files are in the `data` directory
+- Ensure files have correct extensions (.txt)
+- Verify file permissions
+
+**Problem**: Web interface won't open
+**Solution**:
+- Check if port 8080 is available
+- Try running as administrator
+- Check Windows firewall settings
+
+**Problem**: Analysis fails with errors
+**Solution**:
+- Verify file format is correct
+- Check for corrupted or empty files
+- Review file encoding (should be UTF-8 or ASCII)
+
+### Getting Help
+1. Check the error messages in the console
+2. Look at the debug information in `/api/debug`
+3. Review the log files generated during analysis
+4. Contact technical support with specific error details
+
+## 📋 System Requirements
+
+### Minimum Requirements
+- **OS**: Windows 10 or later
+- **RAM**: 4GB minimum, 8GB recommended
+- **Storage**: 2GB free space
+- **Browser**: Chrome, Firefox, Edge (latest versions)
+
+### Recommended Setup
+- **RAM**: 16GB for large datasets
+- **CPU**: Multi-core processor for faster analysis
+- **Storage**: SSD for improved performance
+- **Monitor**: 1920x1080 or higher resolution
+
+## 🏗️ Building from Source
+
+### For Developers
 ```bash
-# Install with development dependencies
+# Clone the repository
+git clone <repository-url>
+cd PEMTRON_warpage
+
+# Install development dependencies
 pip install -r requirements.txt
 
-# Run tests
+# Run tests (if available)
 pytest
 
-# Format code
-black .
-
-# Lint code
-flake8 .
+# Build executable
+python -m PyInstaller web_server.spec --clean
 ```
 
-## 🖥️ Usage
+### Creating Custom Builds
+1. Modify `config.py` for custom settings
+2. Update `web_server.spec` for build configuration
+3. Run PyInstaller to generate executable
+4. Test thoroughly before distribution
 
-### Web Interface (Recommended)
-1. **Start the application**: `python main.py`
-2. **Select data source**: Choose between folder analysis or file upload
-3. **Configure processing**: Set options like colormap, DPI, region extraction
-4. **Run analysis**: Click "Start Analysis" to process your data
-5. **View results**: Browse through heatmaps, 3D plots, and statistical analysis
-6. **Export reports**: Generate PDF reports with all visualizations
+## 📈 Performance Tips
 
-### Command Line Interface
+### For Large Datasets
+- Use region extraction to focus on relevant areas
+- Lower DPI settings for faster processing
+- Process files in smaller batches
+- Close browser tabs when not needed
+
+### For Better Quality
+- Increase DPI to 300 for publication-quality plots
+- Use 'viridis' or 'plasma' colormaps for better visibility
+- Enable all statistical analysis options
+- Export individual plots as PNG for presentations
+
+## 📡 API Documentation
+
+The PEMTRON Warpage Analysis Tool provides a comprehensive REST API for programmatic access to all analysis features.
+
+### Base URL
+```
+http://localhost:8080/api
+```
+
+### Authentication
+No authentication required for local deployment.
+
+### Response Format
+All API responses follow this format:
+```json
+{
+  "success": true,
+  "data": { ... },
+  "error": "Error message if success is false"
+}
+```
+
+### Core Endpoints
+
+#### 1. Get Available Folders
+```http
+GET /api/folders
+```
+
+**Description**: Retrieve list of available data folders for analysis.
+
+**Response**:
+```json
+{
+  "folders": ["samsung01", "단일보드", "전체보드"],
+  "data_directory": "/path/to/data"
+}
+```
+
+**Example**:
 ```bash
-# Analyze a directory
-python main.py --cli --directory ./data/sample --export ./output
-
-# Analyze a single file
-python main.py --cli --file measurement.txt --export ./output
-
-# Custom settings
-python main.py --cli --directory ./data --colormap viridis --dpi 300
+curl http://localhost:8080/api/folders
 ```
 
-### Configuration Options
+#### 2. Start Analysis
+```http
+POST /api/analyze
+```
+
+**Description**: Analyze selected folder with specified parameters.
+
+**Request Body**:
+```json
+{
+  "folder": "samsung01",
+  "use_original": true,
+  "row_fraction": 1.0,
+  "col_fraction": 1.0,
+  "vmin": null,
+  "vmax": null
+}
+```
+
+**Parameters**:
+- `folder` (string, required): Name of the folder to analyze
+- `use_original` (boolean): Use original files (@_ORI.txt) vs corrected files (.txt)
+- `row_fraction` (float): Fraction of rows to keep in center (0.0-1.0)
+- `col_fraction` (float): Fraction of columns to keep in center (0.0-1.0)
+- `vmin` (float, optional): Minimum value for color scale
+- `vmax` (float, optional): Maximum value for color scale
+
+**Response**:
+```json
+{
+  "success": true,
+  "summary": {
+    "folder": "samsung01",
+    "file_count": 11,
+    "files": ["20250829104632@B550657650513.txt", ...],
+    "plots_available": ["individual", "comparison"],
+    "total_data_points": 1234567
+  }
+}
+```
+
+**Example**:
 ```bash
-# Web interface options
-python main.py --port 8090 --host 0.0.0.0 --debug
-
-# Analysis options
-python main.py --cli --data-dir ./data --output-dir ./results
+curl -X POST http://localhost:8080/api/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"folder": "samsung01", "use_original": true}'
 ```
 
-## 📁 Project Structure
-
-```
-PEMTRON_warpage/
-├── core/                   # Core analysis engine
-│   ├── __init__.py
-│   ├── config.py          # Configuration management
-│   ├── data_processor.py  # Data loading and processing
-│   ├── statistics.py      # Statistical calculations
-│   ├── analyzer.py        # Main analysis orchestrator
-│   └── exceptions.py      # Custom exceptions
-├── visualization/          # Visualization system
-│   ├── __init__.py
-│   ├── plotter.py         # Plot generation
-│   ├── renderer.py        # Plot rendering and conversion
-│   └── exporters.py       # PDF and image export
-├── web/                   # Web interface
-│   ├── __init__.py
-│   ├── app.py            # Flask application factory
-│   ├── routes.py         # Page routes
-│   ├── api.py            # REST API endpoints
-│   ├── templates/        # HTML templates
-│   └── static/           # CSS, JS, images
-├── data/                  # Sample data directory
-├── output/               # Default output directory
-├── temp/                 # Temporary files
-├── main.py              # Application entry point
-├── requirements.txt     # Python dependencies
-└── README.md           # This file
+#### 3. Get Individual Plot
+```http
+GET /api/plot/{file_id}
 ```
 
-## 🔧 Configuration
+**Description**: Retrieve individual plot for specific file.
 
-### Application Configuration
-The tool uses a hierarchical configuration system:
+**Parameters**:
+- `file_id` (string): File index (0, 1, 2...) or filename
 
+**Response**:
+```json
+{
+  "success": true,
+  "image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
+  "file_index": 0,
+  "filename": "measurement.txt",
+  "stats": {
+    "shape": "100x100",
+    "min": -45.2,
+    "max": 123.7,
+    "mean": 12.4,
+    "range": 168.9
+  }
+}
+```
+
+**Example**:
+```bash
+curl http://localhost:8080/api/plot/0
+```
+
+#### 4. Get 3D Surface Plot
+```http
+GET /api/3d_plot
+```
+
+**Description**: Generate and retrieve 3D surface plot of analyzed data.
+
+**Response**:
+```json
+{
+  "success": true,
+  "image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
+}
+```
+
+#### 5. Get Statistical Comparison Plot
+```http
+GET /api/stats_plot
+```
+
+**Description**: Get statistical comparison plot showing analysis across all files.
+
+**Response**:
+```json
+{
+  "success": true,
+  "image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
+}
+```
+
+#### 6. Get All Plots
+```http
+GET /api/all_plots
+```
+
+**Description**: Retrieve all generated plots in a single response.
+
+**Response**:
+```json
+{
+  "success": true,
+  "plots": {
+    "individual": [
+      {
+        "file_id": "File_01",
+        "filename": "measurement1.txt",
+        "image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
+        "stats": { "shape": [100, 100], "min": -45.2, "max": 123.7, "mean": 12.4 }
+      }
+    ],
+    "comparison": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
+    "3d": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
+    "mean": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
+    "range": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
+    "std": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
+  }
+}
+```
+
+#### 7. Export PDF Report
+```http
+GET /api/export_pdf?filename=report.pdf
+POST /api/export_pdf
+```
+
+**Description**: Generate and download PDF report with all analysis results.
+
+**GET Parameters**:
+- `filename` (string, optional): Custom filename for the PDF
+
+**POST Request Body**:
+```json
+{
+  "filename": "custom_report.pdf"
+}
+```
+
+**Response**: Binary PDF file download
+
+**Example**:
+```bash
+# GET request
+curl http://localhost:8080/api/export_pdf?filename=my_report.pdf -o report.pdf
+
+# POST request
+curl -X POST http://localhost:8080/api/export_pdf \
+  -H "Content-Type: application/json" \
+  -d '{"filename": "analysis_report.pdf"}' \
+  -o report.pdf
+```
+
+### Advanced Analysis Endpoints
+
+#### 8. Get Mean Comparison Plot
+```http
+GET /api/mean_plot
+```
+
+**Description**: Generate mean value comparison across all measurements.
+
+#### 9. Get Range Analysis Plot
+```http
+GET /api/range_plot
+```
+
+**Description**: Generate range (max-min) comparison plot.
+
+#### 10. Get Standard Deviation Plot
+```http
+GET /api/std_plot
+```
+
+**Description**: Generate standard deviation comparison plot.
+
+#### 11. Get Min-Max Analysis Plot
+```http
+GET /api/minmax_plot
+```
+
+**Description**: Generate minimum and maximum value comparison plot.
+
+#### 12. Get Distribution Plot
+```http
+GET /api/distribution_plot
+```
+
+**Description**: Generate warpage value distribution analysis.
+
+#### 13. Get Advanced Analysis
+```http
+GET /api/advanced_analysis
+```
+
+**Description**: Get comprehensive advanced statistical analysis.
+
+**Response**:
+```json
+{
+  "success": true,
+  "plots": [
+    {
+      "title": "Advanced Statistical Analysis",
+      "image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
+    }
+  ]
+}
+```
+
+### Utility Endpoints
+
+#### 14. Server Status
+```http
+GET /api/status
+```
+
+**Description**: Check server health and analysis status.
+
+**Response**:
+```json
+{
+  "healthy": true,
+  "has_data": true,
+  "has_plots": true,
+  "file_count": 11
+}
+```
+
+#### 15. Debug Information
+```http
+GET /api/debug
+```
+
+**Description**: Get detailed diagnostic information for troubleshooting.
+
+**Response**:
+```json
+{
+  "data_directory": "/path/to/data",
+  "data_dir_exists": true,
+  "cwd": "/current/working/directory",
+  "items": ["folder1", "folder2"],
+  "scan": [
+    {
+      "name": "samsung01",
+      "path": "/path/to/data/samsung01",
+      "is_dir": true,
+      "has_data_files": true
+    }
+  ]
+}
+```
+
+### Error Handling
+
+#### Common HTTP Status Codes
+- `200 OK`: Successful request
+- `400 Bad Request`: Invalid parameters or missing required fields
+- `404 Not Found`: Resource not found (folder, file, plot)
+- `500 Internal Server Error`: Server processing error
+
+#### Error Response Format
+```json
+{
+  "error": "Detailed error message describing what went wrong"
+}
+```
+
+### Usage Examples
+
+#### Python Example
 ```python
-from core import Config
+import requests
+import json
 
-config = Config()
-config.visualization.colormap = 'viridis'
-config.visualization.dpi = 300
-config.processing.remove_artifacts = True
-config.server.port = 8080
+# Base URL
+base_url = "http://localhost:8080/api"
+
+# Get available folders
+folders = requests.get(f"{base_url}/folders").json()
+print("Available folders:", folders['folders'])
+
+# Start analysis
+analysis_data = {
+    "folder": "samsung01",
+    "use_original": True,
+    "row_fraction": 0.8,
+    "col_fraction": 0.8
+}
+result = requests.post(f"{base_url}/analyze", json=analysis_data).json()
+print("Analysis result:", result['summary'])
+
+# Get first plot
+plot = requests.get(f"{base_url}/plot/0").json()
+print("Plot stats:", plot['stats'])
+
+# Export PDF
+pdf_response = requests.get(f"{base_url}/export_pdf?filename=my_report.pdf")
+with open("my_report.pdf", "wb") as f:
+    f.write(pdf_response.content)
 ```
 
-### File Patterns
-- **Original files**: `*@_ORI.txt` - Raw measurement data
-- **Corrected files**: `*.txt` (excluding `@_ORI.txt`) - Processed measurement data
-- **Binary files**: `*.ptr` - Binary measurement format
+#### JavaScript Example
+```javascript
+// Get available folders
+fetch('/api/folders')
+  .then(response => response.json())
+  .then(data => console.log('Folders:', data.folders));
 
-### Processing Options
-- **Artifact Removal**: Automatically remove common artifact values (-4000, ±9999, ±99999)
-- **Zero Padding**: Remove all-zero rows and columns
-- **Region Extraction**: Extract center regions using configurable fractions
-- **Color Scaling**: Automatic or manual min/max value setting
+// Start analysis
+fetch('/api/analyze', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    folder: 'samsung01',
+    use_original: true,
+    row_fraction: 1.0,
+    col_fraction: 1.0
+  })
+})
+.then(response => response.json())
+.then(data => console.log('Analysis:', data.summary));
 
-## 📊 Data Format
-
-### Input Files
-The tool accepts two main file formats:
-
-1. **Text files (.txt)**: Space-separated numerical data
-```
-1.234 2.456 3.789
-4.567 5.890 6.123
-7.456 8.789 9.012
-```
-
-2. **PTR files (.ptr)**: Binary measurement files (auto-detected format)
-
-### Output Files
-- **PNG images**: Individual plot exports
-- **PDF reports**: Comprehensive analysis reports
-- **JSON data**: Statistical results and metadata
-
-## 🎨 Visualization Options
-
-### Colormaps
-- `jet` (default): Traditional rainbow colormap
-- `viridis`: Perceptually uniform blue-green-yellow
-- `plasma`: Purple-pink-yellow colormap
-- `coolwarm`: Blue-red diverging colormap
-- `seismic`: Blue-white-red diverging colormap
-
-### Plot Types
-- **2D Heatmaps**: Color-coded surface plots with statistics
-- **3D Surfaces**: Interactive 3D representations
-- **Comparison**: Side-by-side multi-file analysis
-- **Statistics**: Bar charts, box plots, distribution plots
-
-## 🔍 API Reference
-
-### REST Endpoints
-- `GET /api/folders` - List available data folders
-- `POST /api/analyze` - Start folder analysis
-- `POST /api/upload` - Upload files for analysis
-- `GET /api/plots/all` - Get all generated plots
-- `POST /api/export/pdf` - Export PDF report
-- `GET /api/statistics` - Get statistical results
-- `GET /api/status` - Application health check
-
-### Python API
-```python
-from core import WarpageAnalyzer, Config
-
-# Create analyzer
-config = Config()
-analyzer = WarpageAnalyzer(config)
-
-# Analyze directory
-results = analyzer.analyze_directory('./data/sample')
-
-# Export results
-analyzer.export_results('./output', export_plots=True, export_pdf=True)
+// Get all plots
+fetch('/api/all_plots')
+  .then(response => response.json())
+  .then(data => {
+    // Display individual plots
+    data.plots.individual.forEach(plot => {
+      console.log(`File: ${plot.filename}, Stats:`, plot.stats);
+    });
+  });
 ```
 
-## 🧪 Testing
-
-Run the test suite:
+#### cURL Examples
 ```bash
-# Run all tests
-pytest
+# Complete workflow
+# 1. Check available folders
+curl http://localhost:8080/api/folders
 
-# Run with coverage
-pytest --cov=core --cov=visualization --cov=web
+# 2. Start analysis
+curl -X POST http://localhost:8080/api/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"folder": "samsung01", "use_original": true}'
 
-# Run specific test file
-pytest tests/test_data_processor.py
+# 3. Get server status
+curl http://localhost:8080/api/status
+
+# 4. Get all plots
+curl http://localhost:8080/api/all_plots > plots.json
+
+# 5. Export PDF report
+curl http://localhost:8080/api/export_pdf -o analysis_report.pdf
 ```
 
-## 🤝 Contributing
+### Rate Limiting
+No rate limiting is currently implemented for local deployment. For production use, consider implementing appropriate rate limiting.
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Add tests for new functionality
-5. Run the test suite (`pytest`)
-6. Format code (`black .`)
-7. Commit changes (`git commit -am 'Add amazing feature'`)
-8. Push to branch (`git push origin feature/amazing-feature`)
-9. Create a Pull Request
-
-## 📝 License
-
-This project is proprietary software developed for PEMTRON semiconductor manufacturing analysis.
-
-## 📞 Support
-
-For technical support or questions:
-- Create an issue in the repository
-- Contact the development team
-- Check the documentation in `/docs`
+### CORS Support
+Cross-Origin Resource Sharing (CORS) is enabled for all endpoints to support web-based clients.
 
 ## 🔄 Version History
 
 ### v2.0.1 (Current)
-- Fixed web_server.exe execution issue - now properly runs Python server directly
-- Updated port configuration to use 8080 as default
-- Improved error handling for executable vs Python script execution
-- Enhanced debugging and logging capabilities
+- ✅ Fixed executable execution issues
+- ✅ Updated port configuration to 8080
+- ✅ Improved error handling and debugging
+- ✅ Enhanced web interface responsiveness
 
 ### v2.0.0
-- Complete rewrite with modern architecture
-- Web-based interface with responsive design
-- Advanced statistical analysis
-- Interactive visualizations
-- REST API support
-- Comprehensive error handling
-- Modular, extensible design
+- 🆕 Complete rewrite with modern web interface
+- 🆕 Advanced statistical analysis capabilities
+- 🆕 3D visualization support
+- 🆕 Professional PDF report generation
+- 🆕 Batch processing capabilities
 
 ### v1.x (Legacy)
 - Basic command-line interface
-- Simple visualization
+- Simple plotting capabilities
 - Limited file format support
 
-## 🎯 Roadmap
+## 🤝 Support and Feedback
 
-### Planned Features
-- [ ] Machine learning integration for anomaly detection
-- [ ] Real-time data streaming support
-- [ ] Advanced statistical models
-- [ ] Integration with external databases
-- [ ] Multi-language support
-- [ ] Cloud deployment options
-- [ ] Advanced filtering and preprocessing
-- [ ] Custom colormap creation
-- [ ] Automated report scheduling
-- [ ] Performance optimizations
+### Getting Support
+- **Technical Issues**: Check troubleshooting section first
+- **Feature Requests**: Contact the development team
+- **Bug Reports**: Provide detailed error information and steps to reproduce
 
-## 💡 Tips and Best Practices
+### Contributing
+This is proprietary software developed for PEMTRON semiconductor analysis. Contact the development team for contribution guidelines.
 
-### Performance Optimization
-- Use smaller DPI settings (100-150) for faster processing
-- Process files in batches for large datasets
-- Consider region extraction for very large measurements
-- Enable only necessary plot types to reduce memory usage
+## 📄 License
 
-### Data Quality
-- Verify file formats before analysis
-- Check for consistent measurement grids
-- Review artifact removal settings for your data type
-- Validate statistical results against known standards
+This software is proprietary and developed specifically for PEMTRON semiconductor manufacturing analysis. All rights reserved.
 
-### Troubleshooting
-- Check log files for detailed error information
-- Verify file permissions and paths
-- Ensure sufficient disk space for output files
-- Monitor memory usage for large datasets
+---
+
+**Ready to analyze your warpage data?** 
+
+1. 🏃‍♂️ **Quick start**: Run `web_server.exe` and open your browser to `http://localhost:8080`
+2. 📁 **Load data**: Put your measurement files in the `data` folder
+3. 🎯 **Analyze**: Select your data and click "Analyze"
+4. 📊 **Visualize**: Explore your results with interactive plots
+5. 📑 **Export**: Generate professional PDF reports
+
+*Happy analyzing!* 🎉
