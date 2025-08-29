@@ -34,8 +34,8 @@ WEB_DEBUG = True         # 웹 디버그 모드 / Web debug mode
 
 # 파일 패턴 / File patterns
 FILE_PATTERNS = {
-    'original': '@_ORI.txt',     # 원본 파일 패턴 / Original files pattern
-    'corrected': '@.txt'         # 보정된 파일 패턴 (@_ORI.txt 제외) / Corrected files pattern (excluding @_ORI.txt)
+    'original': '_ORI.txt',     # 원본 파일 패턴 / Original files pattern
+    'corrected': '_ORI_A.txt'         # 보정된 파일 패턴 (@_ORI.txt 제외) / Corrected files pattern (excluding @_ORI.txt)
 }
 
 # 배치 처리 설정 / Batch processing settings
