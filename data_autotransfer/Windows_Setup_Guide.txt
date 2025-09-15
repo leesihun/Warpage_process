@@ -1,0 +1,251 @@
+# Data Auto Transfer System - Windows to Windows Setup Guide
+
+This guide explains how to set up the Data Auto Transfer System for transferring folders between two Windows computers on the same network.
+
+## Prerequisites
+
+1. Two Windows computers on the same network
+2. Python 3.7+ installed on the source computer
+3. Network connectivity between both computers
+4. Administrative privileges on both computers
+
+## Setup Steps
+
+### Step 1: Prepare the Target Computer (Destination)
+
+1. **Enable File Sharing**:
+   - Open "Control Panel" > "Network and Sharing Center"
+   - Click "Change advanced sharing settings"
+   - Turn on "Network discovery" and "File and printer sharing"
+   - Turn on "Public folder sharing" (optional)
+
+2. **Create a Shared Folder**:
+   - Create a folder for receiving transfers (e.g., C:\Backup\PEMTRON_Data)
+   - Right-click the folder > Properties > Sharing tab
+   - Click "Advanced Sharing" > Check "Share this folder"
+   - Set permissions: Add "Everyone" with "Full Control" (or specific users)
+   - Note the share name (e.g., "PEMTRON_Data")
+
+3. **Find the Computer's IP Address**:
+   - Open Command Prompt (cmd)
+   - Type: ipconfig
+   - Note the IPv4 Address (e.g., 192.168.1.100)
+
+4. **Create a User Account** (Recommended):
+   - Open "Computer Management" > "Local Users and Groups" > "Users"
+   - Create new user (e.g., "backup_user")
+   - Set a strong password
+   - Add to "Users" group (not Administrators)
+   - Give this user access to the shared folder
+
+### Step 2: Install and Configure on Source Computer
+
+1. **Install Python Dependencies**:
+   ```
+   cd C:\path\to\PEMTRON_warpage\data_autotransfer
+   pip install -r requirements.txt
+   ```
+
+2. **Configure the System**:
+   Edit the config.txt file with your settings:
+   ```
+   # Target Computer Settings
+   TARGET_IP=192.168.1.100
+   TARGET_DIRECTORY=PEMTRON_Data
+   PROTOCOL=smb
+   USERNAME=backup_user
+   PASSWORD=your_password
+
+   # Schedule Settings
+   SCHEDULE_TIME=06:00
+   TIMEZONE=Asia/Seoul
+
+   # Source Settings
+   SOURCE_DIRECTORY=../data
+   FOLDER_PATTERN=%Y%m%d
+
+   # Transfer Options
+   DRY_RUN=false
+   RETRY_ATTEMPTS=3
+   RETRY_DELAY=30
+   DELETE_AFTER_TRANSFER=false
+   ```
+
+### Step 3: Testing the Setup
+
+1. **Test Network Connectivity**:
+   ```
+   ping 192.168.1.100
+   ```
+
+2. **Test Manual Connection**:
+   - Open Windows Explorer
+   - Type in address bar: \\192.168.1.100\PEMTRON_Data
+   - Enter username and password when prompted
+   - Verify you can access the shared folder
+
+3. **Test the Auto Transfer System**:
+   ```
+   # Test connection
+   python main.py --test
+
+   # Test transfer with dry run
+   python main.py --once --dry-run
+
+   # Test actual transfer
+   python main.py --once
+   ```
+
+### Step 4: Running the System
+
+1. **Manual Execution**:
+   ```
+   python main.py --once
+   ```
+
+2. **Scheduled Execution**:
+   ```
+   python main.py
+   ```
+   (Press Ctrl+C to stop)
+
+3. **Windows Service** (Advanced):
+   - Download NSSM (Non-Sucking Service Manager)
+   - Install as Windows service for 24/7 operation
+
+## Configuration Examples
+
+### Basic Setup (Same Domain):
+```
+TARGET_IP=192.168.1.100
+TARGET_DIRECTORY=BackupFolder
+PROTOCOL=smb
+USERNAME=MyDomain\backup_user
+PASSWORD=SecurePassword123
+```
+
+### Simple Home Network:
+```
+TARGET_IP=192.168.1.200
+TARGET_DIRECTORY=SharedData
+PROTOCOL=smb
+USERNAME=backup_user
+PASSWORD=password123
+```
+
+### Using Computer Name Instead of IP:
+```
+TARGET_IP=BACKUP-PC
+TARGET_DIRECTORY=DataBackup
+PROTOCOL=smb
+USERNAME=backup_user
+PASSWORD=password123
+```
+
+## Troubleshooting
+
+### Connection Issues:
+
+1. **"Network path not found"**:
+   - Verify IP address: ping target computer
+   - Check if file sharing is enabled on target
+   - Verify shared folder name is correct
+
+2. **"Access denied"**:
+   - Check username and password
+   - Verify user has access to shared folder
+   - Try using computer\username format
+
+3. **"The specified network name is no longer available"**:
+   - Network connection lost
+   - Target computer is offline
+   - Windows firewall blocking connection
+
+### Firewall Configuration:
+
+1. **On Target Computer**:
+   - Windows Defender Firewall > Allow an app
+   - Enable "File and Printer Sharing"
+   - Or create custom rule for port 445 (SMB)
+
+2. **On Source Computer**:
+   - Usually no configuration needed
+   - If issues, allow Python.exe through firewall
+
+### Performance Considerations:
+
+- Large folders may take time to transfer
+- Network speed affects transfer time
+- Consider scheduling during off-hours
+- Monitor disk space on target computer
+
+## Security Best Practices
+
+1. **Use Dedicated Account**:
+   - Create specific user for transfers
+   - Limit permissions to backup folder only
+   - Use strong password
+
+2. **Network Security**:
+   - Ensure computers are on trusted network
+   - Consider VPN for remote transfers
+   - Regularly change passwords
+
+3. **Monitoring**:
+   - Check transfer logs regularly
+   - Monitor for failed transfers
+   - Verify transferred data integrity
+
+## Advanced Configuration
+
+### Running as Windows Service:
+
+1. Download NSSM from https://nssm.cc/
+2. Install the service:
+   ```
+   nssm install DataAutoTransfer
+   nssm set DataAutoTransfer Application "C:\Python39\python.exe"
+   nssm set DataAutoTransfer AppParameters "C:\path\to\main.py"
+   nssm set DataAutoTransfer AppDirectory "C:\path\to\data_autotransfer"
+   nssm start DataAutoTransfer
+   ```
+
+### Scheduled Task Alternative:
+
+1. Open Task Scheduler
+2. Create Basic Task
+3. Set trigger to daily at desired time
+4. Set action to start program:
+   - Program: python.exe
+   - Arguments: main.py --once
+   - Start in: C:\path\to\data_autotransfer
+
+## File Structure Example:
+
+```
+Source Computer:
+C:\PEMTRON_warpage\
+├── data\
+│   ├── 20250914\  (yesterday's folder)
+│   ├── 20250915\  (today's folder)
+│   └── 20250916\  (future folder)
+└── data_autotransfer\
+    ├── main.py
+    ├── config.txt
+    └── ...
+
+Target Computer:
+\\192.168.1.100\PEMTRON_Data\
+├── 20250913\
+├── 20250914\  (transferred folders appear here)
+└── ...
+```
+
+## Support
+
+- Check transfer.log file for detailed error messages
+- Use --test flag to verify connectivity
+- Use --dry-run flag to test without actual transfer
+- Monitor Windows Event Viewer for system-level errors
+
+For additional help, check the main README.md file or system logs.

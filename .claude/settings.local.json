@@ -1,26 +1,26 @@
 {
   "permissions": {
     "allow": [
-      "Bash(ls:*)",
-      "Bash(rmdir:*)",
-      "Bash(rm:*)",
       "Bash(python:*)",
-      "Bash(timeout:*)",
-      "Bash(mv:*)",
+      "Bash(./web_server.exe)",
+      "Bash(dir dist)",
+      "Bash(dir:*)",
+      "Bash(tasklist:*)",
+      "Bash(if exist build rmdir /s /q build)",
+      "Bash(rm:*)",
+      "Bash(./dist/web_server.exe --help)",
+      "Bash(findstr:*)",
+      "Bash(jupyter nbconvert:*)",
+      "Bash(\"C:\\Users\\Lee\\Desktop\\Huni\\PEMTRON_warpage\\dist\\PEMTRON_Warpage_Tool.exe\" --help)",
+      "Bash(mkdir:*)",
       "Bash(pip install:*)",
-      "Bash(del *.pdf)",
-      "Bash(curl:*)",
-      "Bash(/dev/null)",
-      "Bash(pkill:*)",
-      "Bash(pyinstaller:*)",
-      "Bash(PEMTRON_Warpage_Analyzer.exe)",
-      "Bash(\"./PEMTRON_Warpage_Analyzer.exe\")",
-      "Bash(git add:*)",
-      "Bash(git commit:*)",
-      "Bash(taskkill:*)",
-      "Bash(del:*)",
-      "Bash(pip uninstall:*)"
+      "Bash(copy config.txt dist )",
+      "Bash(./DataAutoTransfer.exe --help)",
+      "Bash(./dist/DataAutoTransfer.exe --test)",
+      "Bash(git reset:*)",
+      "Bash(./git-auto-push.sh)"
     ],
-    "deny": []
+    "deny": [],
+    "ask": []
   }
 }

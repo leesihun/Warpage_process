@@ -11,8 +11,8 @@ from config import FILE_PATTERNS
 
 def load_data_from_file(file_path):
     """
-    텍스트 파일에서 원시 데이터를 로드하고 모든 0인 행/열을 제거
-    Load raw data from a text file, removing all-zero rows and columns by default.
+    텍스트 또는 AKROMETRIX 파일에서 원시 데이터를 로드하고 모든 0인 행/열을 제거
+    Load raw data from a text or AKROMETRIX file, removing all-zero rows and columns by default.
     
     Args:
         file_path (str): 데이터 파일 경로 / Path to the data file
@@ -22,16 +22,60 @@ def load_data_from_file(file_path):
     """
     try:
         print(f"Opening file: {file_path}")
-        with open(file_path, 'r', encoding='utf-8') as f:
-            data = f.read()
+        
+        # 파일 타입에 따른 처리 / Process based on file type
+        file_ext = os.path.splitext(file_path)[1].lower()
+        is_akrometrix = file_ext in ['.dat']
+        
+        if is_akrometrix:
+            print(f"  Detected AKROMETRIX file format (.dat)")
+            # AKROMETRIX 파일은 다양한 인코딩을 시도 / Try various encodings for AKROMETRIX files
+            encodings_to_try = ['utf-8', 'latin-1', 'cp1252', 'ascii']
+            data = None
+            for encoding in encodings_to_try:
+                try:
+                    with open(file_path, 'r', encoding=encoding) as f:
+                        data = f.read()
+                    print(f"  Successfully read with {encoding} encoding")
+                    break
+                except UnicodeDecodeError:
+                    continue
+            
+            if data is None:
+                print(f"  Error: Could not read file with any encoding")
+                return None
+        else:
+            # 일반 텍스트 파일 / Regular text file
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = f.read()
         
         print(f"  File size: {len(data)} characters")
         
         # 넘파이 배열로 변환 / Convert to numpy array
         data_lines = data.strip().split('\n')
-        print(f"  Number of lines: {len(data_lines)}")
         
-        data_array = np.array([list(map(float, line.split())) for line in data_lines])
+        # 빈 줄이나 헤더 정보가 있는 경우 필터링 / Filter out empty lines or header information
+        clean_lines = []
+        for line in data_lines:
+            line = line.strip()
+            if line and not line.startswith('#') and not line.startswith('%'):
+                # 숫자로만 구성된 라인인지 확인 / Check if line contains only numbers
+                try:
+                    # 라인을 float로 변환 가능한지 테스트 / Test if line can be converted to floats
+                    float_values = [float(x) for x in line.split()]
+                    if float_values:  # 빈 리스트가 아닌 경우 / If not empty list
+                        clean_lines.append(line)
+                except ValueError:
+                    # 숫자가 아닌 라인은 헤더로 간주하고 무시 / Non-numeric lines are considered headers and ignored
+                    continue
+        
+        print(f"  Number of data lines: {len(clean_lines)}")
+        
+        if not clean_lines:
+            print(f"  Error: No valid data lines found")
+            return None
+        
+        data_array = np.array([list(map(float, line.split())) for line in clean_lines])
         print(f"  Original array shape: {data_array.shape}")
         
         # 모든 값이 0인 행 제거 / Remove all-zero rows
@@ -103,46 +147,93 @@ def extract_center_region(data_array, row_fraction=1, col_fraction=1):
 
 def find_data_files(folder_path, use_original_files=True):
     """
-    지정된 폴더에서 모든 데이터 파일 찾기 (원본 또는 보정된 파일)
-    Find all data files in a given folder (original or corrected).
+    지정된 폴더에서 모든 데이터 파일 찾기 (원본, 보정된 파일, 또는 AKROMETRIX 파일)
+    Find all data files in a given folder (original, corrected, or AKROMETRIX files).
     
     Args:
         folder_path (str): 폴더 경로 / Path to the folder
-        use_original_files (bool): True면 원본 파일들 찾기, False면 보정된 파일(.txt, 원본 파일들 제외) 찾기
-                                  If True, look for original files, if False, look for corrected files (.txt but not original files)
+        use_original_files (bool): True면 원본 파일들 우선, False면 보정된 파일 우선
+                                  If True, prioritize original files, if False, prioritize corrected files
         
     Returns:
         list: 데이터 파일들의 전체 경로 목록, 없으면 빈 목록 / List of full paths to the data files, or empty list if none found
     """
     try:
         files = os.listdir(folder_path)
+        target_files = []
+        file_type = "unknown"
         
+        # 파일 검색 우선순위 설정 / Set file search priority
+        search_order = []
         if use_original_files:
-            # 원본 파일 찾기 (여러 패턴 지원) / Look for original files (multiple patterns supported)
-            patterns = FILE_PATTERNS['original']
-            target_files = []
-            for f in files:
-                for pattern in patterns:
-                    if f.endswith(pattern):
-                        target_files.append(f)
-                        break  # 한 번 매치되면 다른 패턴은 확인하지 않음
-            file_type = "original"
+            search_order = ['original', 'original_with_package', 'corrected', 'akrometrix']
         else:
-            # 보정된 파일 찾기 (.txt이지만 원본 파일 패턴들은 제외) / Look for corrected files (.txt but not original file patterns)
-            pattern = FILE_PATTERNS['corrected']
-            original_patterns = FILE_PATTERNS['original']
-            target_files = []
-            for f in files:
-                if f.endswith(pattern):
-                    # 원본 파일 패턴들 중 어떤 것과도 매치되지 않는지 확인
-                    is_original = False
-                    for orig_pattern in original_patterns:
-                        if f.endswith(orig_pattern):
-                            is_original = True
-                            break
-                    if not is_original:
-                        target_files.append(f)
-            file_type = "corrected"
+            search_order = ['corrected', 'original', 'original_with_package', 'akrometrix']
+        
+        # 각 파일 타입을 우선순위에 따라 검색 / Search each file type according to priority
+        for file_category in search_order:
+            if file_category == 'original':
+                # 원본 파일 찾기 (여러 패턴 지원) / Look for original files (multiple patterns supported)
+                patterns = FILE_PATTERNS['original']
+                for f in files:
+                    for pattern in patterns:
+                        if f.endswith(pattern):
+                            target_files.append(f)
+                            break  # 한 번 매치되면 다른 패턴은 확인하지 않음
+                if target_files:
+                    file_type = "original"
+                    break
+                    
+            elif file_category == 'original_with_package':
+                # 원본 패키지 파일 찾기 (여러 패턴 지원) / Look for original package files (multiple patterns supported)
+                if 'original_with_package' in FILE_PATTERNS:
+                    patterns = FILE_PATTERNS['original_with_package']
+                    for f in files:
+                        for pattern in patterns:
+                            if f.endswith(pattern):
+                                target_files.append(f)
+                                break  # 한 번 매치되면 다른 패턴은 확인하지 않음
+                    if target_files:
+                        file_type = "original_with_package"
+                        break
+                    
+            elif file_category == 'corrected':
+                # 보정된 파일 찾기 (.txt이지만 원본 파일 패턴들은 제외) / Look for corrected files (.txt but not original file patterns)
+                pattern = FILE_PATTERNS['corrected']
+                original_patterns = FILE_PATTERNS['original']
+                original_with_package_patterns = FILE_PATTERNS.get('original_with_package', [])
+                for f in files:
+                    if f.endswith(pattern):
+                        # 원본 파일 패턴들 중 어떤 것과도 매치되지 않는지 확인
+                        is_original = False
+                        for orig_pattern in original_patterns:
+                            if f.endswith(orig_pattern):
+                                is_original = True
+                                break
+                        # 원본 패키지 파일 패턴들과도 매치되지 않는지 확인
+                        if not is_original:
+                            for orig_pkg_pattern in original_with_package_patterns:
+                                if f.endswith(orig_pkg_pattern):
+                                    is_original = True
+                                    break
+                        if not is_original:
+                            target_files.append(f)
+                if target_files:
+                    file_type = "corrected"
+                    break
+                    
+            elif file_category == 'akrometrix':
+                # AKROMETRIX .dat 파일 확인 / Check for AKROMETRIX .dat files
+                if 'akrometrix' in FILE_PATTERNS:
+                    akrometrix_patterns = FILE_PATTERNS['akrometrix']
+                    for f in files:
+                        for pattern in akrometrix_patterns:
+                            if f.endswith(pattern):
+                                target_files.append(f)
+                                break  # 한 번 매치되면 다른 패턴은 확인하지 않음
+                    if target_files:
+                        file_type = "AKROMETRIX"
+                        break
         
         if target_files:
             # 일관된 순서를 위해 파일 정렬 / Sort files for consistent ordering

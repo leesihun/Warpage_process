@@ -1,0 +1,24 @@
+# Data Auto Transfer Configuration
+# Lines starting with # are comments
+
+# Schedule Configuration
+SCHEDULE_TIME=06:00
+TIMEZONE=Asia/Seoul
+
+# Source Configuration
+SOURCE_DIRECTORY=../data
+FOLDER_PATTERN=%Y%m%d
+
+# Target Configuration
+TARGET_IP=10.213.43.11
+TARGET_DIRECTORY=GUMI_S-AOI
+PROTOCOL=smb
+USERNAME=
+PASSWORD=
+
+# Transfer Options
+DRY_RUN=false
+RETRY_ATTEMPTS=3
+RETRY_DELAY=30
+DELETE_AFTER_TRANSFER=false
+LOG_LEVEL=INFO

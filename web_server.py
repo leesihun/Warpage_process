@@ -201,7 +201,8 @@ def analyze():
     try:
         data = request.get_json()
         folder = data.get('folder')
-        use_original = data.get('use_original', True)
+        file_type = data.get('file_type', 'original')  # Get file type from GUI
+        use_original = data.get('use_original', True)  # Keep for backward compatibility
         row_fraction = float(data.get('row_fraction', 1.0))
         col_fraction = float(data.get('col_fraction', 1.0))
         vmin = data.get('vmin')
@@ -210,9 +211,22 @@ def analyze():
         if not folder:
             return jsonify({'error': 'No folder selected'}), 400
         
+        # Determine use_original based on file_type selection
+        if file_type == 'original':
+            use_original = True
+        elif file_type == 'original_with_package':
+            use_original = True
+        elif file_type == 'corrected':
+            use_original = False
+        elif file_type == 'akrometrix':
+            use_original = False  # AKROMETRIX files are handled as a special case in data_loader
+        else:
+            use_original = True  # Default fallback
+        
         # Update config
         config = DEFAULT_CONFIG.copy()
         config['use_original_files'] = use_original
+        config['file_type'] = file_type  # Add file type to config
         config['row_fraction'] = row_fraction
         config['col_fraction'] = col_fraction
         if vmin is not None:
@@ -666,7 +680,7 @@ if __name__ == '__main__':
         browser_thread.start()
     
     try:
-        app.run(host='0.0.0.0', port=WEB_PORT, debug=True, use_reloader=False)
+        app.run(host='127.0.0.1', port=WEB_PORT, debug=False, use_reloader=False, threaded=True)
     except KeyboardInterrupt:
         print("\n✓ Server stopped")
     except Exception as e:

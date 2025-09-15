@@ -129,15 +129,27 @@
                             <div class="mb-3">
                                 <label class="form-label">File Type</label>
                                 <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="fileType" id="originalFiles" value="original" checked>
+                                    <input class="form-check-input" type="radio" name="fileType" id="correctedFiles" value="corrected" checked>
+                                    <label class="form-check-label" for="correctedFiles">
+                                        Corrected Files (.txt)
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="fileType" id="originalWithPackageFiles" value="original_with_package">
+                                    <label class="form-check-label" for="originalWithPackageFiles">
+                                        Original Package Files (_ORI_A.txt/@_ORI_A.txt)
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="fileType" id="originalFiles" value="original">
                                     <label class="form-check-label" for="originalFiles">
                                         Original Files (@_ORI.txt)
                                     </label>
                                 </div>
                                 <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="fileType" id="correctedFiles" value="corrected">
-                                    <label class="form-check-label" for="correctedFiles">
-                                        Corrected Files (.txt)
+                                    <input class="form-check-input" type="radio" name="fileType" id="akrometrixFiles" value="akrometrix">
+                                    <label class="form-check-label" for="akrometrixFiles">
+                                        AKROMETRIX Files (.dat/.DAT)
                                     </label>
                                 </div>
                             </div>
@@ -603,6 +615,7 @@
                     },
                     body: JSON.stringify({
                         folder: folder,
+                        file_type: fileType,
                         use_original: fileType === 'original',
                         row_fraction: rowFraction,
                         col_fraction: colFraction,

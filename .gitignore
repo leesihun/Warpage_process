@@ -125,3 +125,17 @@ temp/
 # Data files (keep structure but ignore actual data)
 data/**/20*/*.txt
 data/**/20*/*.ptr
+
+# Windows reserved device names (prevent filesystem issues)
+nul
+NUL
+con
+CON
+prn
+PRN
+aux
+AUX
+com[1-9]
+COM[1-9]
+lpt[1-9]
+LPT[1-9]
