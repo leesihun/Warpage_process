@@ -4,7 +4,7 @@ Reads configuration from config.txt file.
 """
 
 import os
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 
 class ConfigParser:
@@ -48,8 +48,17 @@ class ConfigParser:
         return self.config.get(key, default)
     
     def get_schedule_time(self) -> str:
-        """Get scheduled execution time."""
+        """Get scheduled execution time (primary schedule)."""
         return self.get('SCHEDULE_TIME', '06:00')
+
+    def get_schedule_times(self) -> List[str]:
+        """Get all scheduled execution times as a list."""
+        # Check if SCHEDULE_TIMES is configured
+        times_str = self.get('SCHEDULE_TIMES', '')
+        if times_str:
+            return [time.strip() for time in times_str.split(',') if time.strip()]
+        # Fallback to single SCHEDULE_TIME
+        return [self.get_schedule_time()]
     
     def get_timezone(self) -> str:
         """Get timezone setting."""
@@ -82,6 +91,22 @@ class ConfigParser:
     def get_password(self) -> str:
         """Get target password."""
         return self.get('PASSWORD', '')
+
+    def get_password_fallbacks(self) -> List[str]:
+        """Get password fallbacks as a list."""
+        fallbacks_str = self.get('PASSWORD_FALLBACKS', '')
+        if not fallbacks_str:
+            return []
+        return [pwd.strip() for pwd in fallbacks_str.split(',') if pwd.strip()]
+
+    def get_all_passwords(self) -> List[str]:
+        """Get all passwords (primary + fallbacks) as a list."""
+        passwords = []
+        primary = self.get_password()
+        if primary:
+            passwords.append(primary)
+        passwords.extend(self.get_password_fallbacks())
+        return passwords
     
     def get_ssh_key_path(self) -> str:
         """Get SSH key path."""

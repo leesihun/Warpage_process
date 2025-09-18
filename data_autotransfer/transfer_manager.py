@@ -7,7 +7,7 @@ import os
 import shutil
 import subprocess
 import time
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 import logging
 
 
@@ -17,12 +17,13 @@ class TransferManager:
     def __init__(self, logger: Optional[logging.Logger] = None):
         self.logger = logger or logging.getLogger(__name__)
     
-    def transfer_folder(self, source_path: str, target_ip: str, target_path: str, 
-                       protocol: str, username: str = "", password: str = "", 
-                       ssh_key_path: str = "", dry_run: bool = False) -> Tuple[bool, str]:
+    def transfer_folder(self, source_path: str, target_ip: str, target_path: str,
+                       protocol: str, username: str = "", password: str = "",
+                       ssh_key_path: str = "", dry_run: bool = False,
+                       password_fallbacks: List[str] = None) -> Tuple[bool, str]:
         """
         Transfer folder to remote location.
-        
+
         Args:
             source_path: Local source folder path
             target_ip: Target IP address
@@ -32,7 +33,8 @@ class TransferManager:
             password: Password for authentication
             ssh_key_path: Path to SSH private key
             dry_run: If True, only simulate the transfer
-            
+            password_fallbacks: List of fallback passwords to try if primary fails
+
         Returns:
             Tuple of (success: bool, message: str)
         """
@@ -47,17 +49,51 @@ class TransferManager:
         if dry_run:
             self.logger.info(f"DRY RUN: Would transfer {source_path} to {target_ip}:{target_path} using {protocol}")
             return True, "Dry run completed successfully"
-        
+
+        # Prepare all passwords to try
+        all_passwords = [password] if password else []
+        if password_fallbacks:
+            all_passwords.extend(password_fallbacks)
+
+        # If no passwords, try once with empty password
+        if not all_passwords:
+            all_passwords = [""]
+
         try:
-            if protocol == "scp":
-                return self._transfer_scp(source_path, target_ip, target_path, username, password, ssh_key_path)
-            elif protocol == "smb":
-                return self._transfer_smb(source_path, target_ip, target_path, username, password)
-            elif protocol == "local":
-                return self._transfer_local(source_path, target_path)
-            else:
-                return False, f"Unsupported protocol: {protocol}"
-                
+            # Try each password until one succeeds
+            last_error = ""
+            for i, pwd in enumerate(all_passwords):
+                try:
+                    if i > 0:
+                        self.logger.info(f"Trying password fallback {i}/{len(all_passwords)-1}")
+
+                    if protocol == "scp":
+                        success, message = self._transfer_scp(source_path, target_ip, target_path, username, pwd, ssh_key_path)
+                    elif protocol == "smb":
+                        success, message = self._transfer_smb(source_path, target_ip, target_path, username, pwd)
+                    elif protocol == "local":
+                        return self._transfer_local(source_path, target_path)
+                    else:
+                        return False, f"Unsupported protocol: {protocol}"
+
+                    if success:
+                        if i > 0:
+                            self.logger.info(f"Transfer succeeded with password fallback {i}")
+                        return True, message
+                    else:
+                        last_error = message
+                        if i < len(all_passwords) - 1:
+                            self.logger.warning(f"Password {i+1} failed, trying next: {message}")
+
+                except Exception as e:
+                    last_error = f"Transfer attempt {i+1} failed: {str(e)}"
+                    self.logger.error(last_error)
+
+            # All passwords failed
+            error_msg = f"All password attempts failed. Last error: {last_error}"
+            self.logger.error(error_msg)
+            return False, error_msg
+
         except Exception as e:
             error_msg = f"Transfer failed: {str(e)}"
             self.logger.error(error_msg)

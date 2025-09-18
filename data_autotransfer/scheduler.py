@@ -9,7 +9,7 @@ import threading
 import signal
 import sys
 from datetime import datetime
-from typing import Callable, Optional
+from typing import Callable, Optional, List
 import logging
 
 
@@ -29,7 +29,7 @@ class TransferScheduler:
     def schedule_daily_transfer(self, time_str: str, transfer_function: Callable):
         """
         Schedule daily transfer at specified time.
-        
+
         Args:
             time_str: Time in HH:MM format (e.g., "06:00")
             transfer_function: Function to call for transfer
@@ -37,15 +37,52 @@ class TransferScheduler:
         try:
             # Validate time format
             datetime.strptime(time_str, "%H:%M")
-            
+
             # Schedule the job
             schedule.every().day.at(time_str).do(self._safe_transfer_wrapper, transfer_function)
-            
+
             self.logger.info(f"Transfer scheduled for {time_str} daily")
-            
+
         except ValueError as e:
             self.logger.error(f"Invalid time format '{time_str}': {e}")
             raise
+
+    def schedule_multiple_daily_transfers(self, times: List[str], transfer_function: Callable):
+        """
+        Schedule daily transfers at multiple specified times.
+
+        Args:
+            times: List of times in HH:MM format (e.g., ["06:00", "12:00", "18:00"])
+            transfer_function: Function to call for transfer
+        """
+        if not times:
+            self.logger.warning("No schedule times provided")
+            return
+
+        for time_str in times:
+            try:
+                # Validate time format
+                datetime.strptime(time_str, "%H:%M")
+
+                # Schedule the job
+                schedule.every().day.at(time_str).do(self._safe_transfer_wrapper, transfer_function)
+
+                self.logger.info(f"Transfer scheduled for {time_str} daily")
+
+            except ValueError as e:
+                self.logger.error(f"Invalid time format '{time_str}': {e}")
+                continue
+
+        scheduled_count = len([t for t in times if self._is_valid_time_format(t)])
+        self.logger.info(f"Scheduled {scheduled_count} daily transfers")
+
+    def _is_valid_time_format(self, time_str: str) -> bool:
+        """Check if time string is in valid HH:MM format."""
+        try:
+            datetime.strptime(time_str, "%H:%M")
+            return True
+        except ValueError:
+            return False
     
     def _safe_transfer_wrapper(self, transfer_function: Callable):
         """

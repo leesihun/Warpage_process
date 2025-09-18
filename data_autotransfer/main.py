@@ -111,7 +111,7 @@ class DataAutoTransfer:
                 
                 start_time = time.time()
                 
-                # Perform transfer
+                # Perform transfer with password fallbacks
                 success, message = self.transfer_manager.transfer_folder(
                     source_path=source_path,
                     target_ip=self.config.get_target_ip(),
@@ -120,7 +120,8 @@ class DataAutoTransfer:
                     username=self.config.get_username(),
                     password=self.config.get_password(),
                     ssh_key_path=self.config.get_ssh_key_path(),
-                    dry_run=self.config.is_dry_run()
+                    dry_run=self.config.is_dry_run(),
+                    password_fallbacks=self.config.get_password_fallbacks()
                 )
                 
                 duration = time.time() - start_time
@@ -189,6 +190,7 @@ class DataAutoTransfer:
         """
         self.logger.info("Testing connection to target system...")
         
+        # Test with primary password first
         success, message = self.transfer_manager.test_connection(
             target_ip=self.config.get_target_ip(),
             protocol=self.config.get_protocol(),
@@ -196,6 +198,22 @@ class DataAutoTransfer:
             password=self.config.get_password(),
             ssh_key_path=self.config.get_ssh_key_path()
         )
+
+        # If primary password fails, try fallbacks
+        if not success:
+            fallback_passwords = self.config.get_password_fallbacks()
+            for i, fallback_pwd in enumerate(fallback_passwords):
+                self.logger.info(f"Testing connection with password fallback {i+1}")
+                success, message = self.transfer_manager.test_connection(
+                    target_ip=self.config.get_target_ip(),
+                    protocol=self.config.get_protocol(),
+                    username=self.config.get_username(),
+                    password=fallback_pwd,
+                    ssh_key_path=self.config.get_ssh_key_path()
+                )
+                if success:
+                    message += f" (using password fallback {i+1})"
+                    break
         
         if success:
             self.logger.info(f"Connection test successful: {message}")
@@ -207,17 +225,24 @@ class DataAutoTransfer:
     def run_scheduled(self):
         """Run the scheduler for daily automated transfers."""
         try:
-            # Schedule daily transfer
-            schedule_time = self.config.get_schedule_time()
-            self.scheduler.schedule_daily_transfer(schedule_time, self.perform_transfer)
-            
-            self.transfer_logger.log_scheduler_start(schedule_time)
-            
+            # Get schedule times - use multiple times if configured, otherwise single time
+            schedule_times = self.config.get_schedule_times()
+
+            if len(schedule_times) == 1:
+                # Single schedule time
+                schedule_time = schedule_times[0]
+                self.scheduler.schedule_daily_transfer(schedule_time, self.perform_transfer)
+                self.transfer_logger.log_scheduler_start(schedule_time)
+            else:
+                # Multiple schedule times
+                self.scheduler.schedule_multiple_daily_transfers(schedule_times, self.perform_transfer)
+                self.logger.info(f"Scheduled transfers for: {', '.join(schedule_times)}")
+
             # Display next run time
             next_run = self.scheduler.get_next_run_time()
             if next_run:
                 self.logger.info(f"Next transfer scheduled for: {next_run}")
-            
+
             # Start scheduler (blocking)
             self.logger.info("Starting scheduler... Press Ctrl+C to stop")
             self.scheduler.start(blocking=True)
