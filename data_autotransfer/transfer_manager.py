@@ -67,8 +67,8 @@ class TransferManager:
                     if i > 0:
                         self.logger.info(f"Trying password fallback {i}/{len(all_passwords)-1}")
 
-                    if protocol == "scp":
-                        success, message = self._transfer_scp(source_path, target_ip, target_path, username, pwd, ssh_key_path)
+                    if protocol == "scp" or protocol == "ssh":
+                        success, message = self._transfer_ssh_paramiko(source_path, target_ip, target_path, username, pwd, ssh_key_path)
                     elif protocol == "smb":
                         success, message = self._transfer_smb(source_path, target_ip, target_path, username, pwd)
                     elif protocol == "local":
@@ -99,84 +99,137 @@ class TransferManager:
             self.logger.error(error_msg)
             return False, error_msg
     
-    def _transfer_scp(self, source_path: str, target_ip: str, target_path: str, 
-                     username: str, password: str, ssh_key_path: str) -> Tuple[bool, str]:
-        """Transfer using SCP protocol."""
+    def _transfer_ssh_paramiko(self, source_path: str, target_ip: str, target_path: str,
+                              username: str, password: str, ssh_key_path: str) -> Tuple[bool, str]:
+        """Transfer using paramiko SSH/SFTP - no system SSH required."""
         try:
-            # Build SCP command
-            folder_name = os.path.basename(source_path)
-            target_full = f"{username}@{target_ip}:{target_path}/"
-            
-            cmd = ["scp", "-r"]
-            
-            # Add SSH key if provided
-            if ssh_key_path and os.path.exists(ssh_key_path):
-                cmd.extend(["-i", ssh_key_path])
-            
-            # Add options for non-interactive mode
-            cmd.extend(["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"])
-            
-            cmd.extend([source_path, target_full])
-            
-            self.logger.info(f"Executing SCP transfer: {' '.join(cmd[:-2])} [source] [target]")
-            
-            # Execute SCP command
-            if password and not ssh_key_path:
-                # Use sshpass for password authentication
-                cmd = ["sshpass", "-p", password] + cmd
-            
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
-            
-            if result.returncode == 0:
-                self.logger.info(f"SCP transfer successful: {source_path} -> {target_full}")
-                return True, "SCP transfer completed successfully"
-            else:
-                error_msg = f"SCP failed: {result.stderr}"
-                self.logger.error(error_msg)
-                return False, error_msg
-                
-        except subprocess.TimeoutExpired:
-            return False, "SCP transfer timed out"
-        except FileNotFoundError:
-            return False, "SCP command not found. Please install OpenSSH client."
+            import paramiko
+            import stat
+
+            # Create SSH client
+            ssh = paramiko.SSHClient()
+            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+            # Connect using key or password
+            try:
+                if ssh_key_path and os.path.exists(ssh_key_path):
+                    self.logger.info(f"Connecting to {target_ip} using SSH key: {ssh_key_path}")
+                    ssh.connect(target_ip, username=username, key_filename=ssh_key_path, timeout=30)
+                else:
+                    self.logger.info(f"Connecting to {target_ip} using password authentication")
+                    ssh.connect(target_ip, username=username, password=password, timeout=30)
+
+            except paramiko.AuthenticationException:
+                return False, "SSH authentication failed - check username/password/key"
+            except paramiko.SSHException as e:
+                return False, f"SSH connection error: {str(e)}"
+            except Exception as e:
+                return False, f"SSH connection failed: {str(e)}"
+
+            # Create SFTP client
+            sftp = ssh.open_sftp()
+
+            try:
+                # Get source folder name
+                folder_name = os.path.basename(source_path)
+                remote_target = f"{target_path.rstrip('/')}/{folder_name}"
+
+                self.logger.info(f"Starting SFTP transfer: {source_path} -> {remote_target}")
+
+                # Recursively upload directory
+                self._sftp_upload_recursive(sftp, source_path, remote_target)
+
+                self.logger.info(f"SSH transfer successful: {source_path} -> {username}@{target_ip}:{remote_target}")
+                return True, "SSH transfer completed successfully"
+
+            finally:
+                sftp.close()
+                ssh.close()
+
+        except ImportError:
+            return False, "paramiko library not available - please install: pip install paramiko"
         except Exception as e:
-            return False, f"SCP transfer error: {str(e)}"
+            return False, f"SSH transfer error: {str(e)}"
+
+    def _sftp_upload_recursive(self, sftp, local_path: str, remote_path: str):
+        """Recursively upload directory via SFTP."""
+        import stat
+
+        # Create remote directory
+        try:
+            sftp.mkdir(remote_path)
+            self.logger.debug(f"Created remote directory: {remote_path}")
+        except OSError:
+            # Directory might already exist
+            pass
+
+        # Upload all contents
+        for item in os.listdir(local_path):
+            local_item = os.path.join(local_path, item)
+            remote_item = f"{remote_path}/{item}"
+
+            if os.path.isfile(local_item):
+                # Upload file
+                self.logger.debug(f"Uploading file: {local_item} -> {remote_item}")
+                sftp.put(local_item, remote_item)
+            elif os.path.isdir(local_item):
+                # Recursively upload subdirectory
+                self._sftp_upload_recursive(sftp, local_item, remote_item)
     
-    def _transfer_smb(self, source_path: str, target_ip: str, target_path: str, 
+    def _transfer_smb(self, source_path: str, target_ip: str, target_path: str,
                      username: str, password: str) -> Tuple[bool, str]:
-        """Transfer using SMB/CIFS protocol."""
+        """Transfer using SMB/CIFS protocol with proper connection cleanup."""
         try:
             # For Windows, use robocopy or xcopy
             if os.name == 'nt':
+                # Clean up any existing connections to this server first
+                cleanup_success, cleanup_msg = self._cleanup_smb_connections(target_ip)
+                if not cleanup_success:
+                    self.logger.warning(f"Connection cleanup warning: {cleanup_msg}")
+
                 # Mount network drive temporarily
                 drive_letter = "Z:"
                 share_path = f"\\\\{target_ip}\\{target_path.replace('/', '\\')}"
-                
+
                 # Try to connect to network share
                 net_use_cmd = f'net use {drive_letter} {share_path}'
                 if username and password:
                     net_use_cmd += f' /user:{username} {password}'
-                
+
                 result = subprocess.run(net_use_cmd, shell=True, capture_output=True, text=True)
-                
+
                 if result.returncode != 0:
-                    return False, f"Failed to connect to network share: {result.stderr}"
-                
+                    # Check if it's the multiple connection error
+                    stderr = result.stderr.lower()
+                    if ("multiple connections" in stderr or
+                        "다중 연결" in stderr or
+                        "둘 이상의 사용자" in stderr):
+                        # Try cleanup and retry once
+                        self.logger.warning("Multiple connection error detected, retrying after cleanup...")
+                        self._cleanup_smb_connections(target_ip)
+                        time.sleep(2)  # Wait briefly
+                        result = subprocess.run(net_use_cmd, shell=True, capture_output=True, text=True)
+
+                        if result.returncode != 0:
+                            return False, f"Failed to connect after cleanup. Error: {result.stderr}"
+                    else:
+                        return False, f"Failed to connect to network share: {result.stderr}"
+
                 try:
                     # Copy using robocopy
                     folder_name = os.path.basename(source_path)
                     target_full = os.path.join(drive_letter, folder_name)
-                    
+
                     robocopy_cmd = f'robocopy "{source_path}" "{target_full}" /E /R:3 /W:10'
                     result = subprocess.run(robocopy_cmd, shell=True, capture_output=True, text=True)
-                    
+
                     # Robocopy return codes: 0-7 are success, 8+ are errors
                     if result.returncode < 8:
                         self.logger.info(f"SMB transfer successful: {source_path} -> {target_full}")
                         return True, "SMB transfer completed successfully"
                     else:
                         return False, f"Robocopy failed: {result.stderr}"
-                        
+
                 finally:
                     # Disconnect network drive
                     subprocess.run(f'net use {drive_letter} /delete', shell=True, capture_output=True)
@@ -222,7 +275,53 @@ class TransferManager:
             
         except Exception as e:
             return False, f"Local transfer error: {str(e)}"
-    
+
+    def _cleanup_smb_connections(self, target_ip: str) -> Tuple[bool, str]:
+        """Clean up existing SMB connections to target server."""
+        try:
+            if os.name == 'nt':
+                # First, list existing connections to the target IP
+                result = subprocess.run('net use', shell=True, capture_output=True, text=True)
+
+                if result.returncode == 0:
+                    connections_to_remove = []
+                    lines = result.stdout.split('\n')
+
+                    for line in lines:
+                        if target_ip in line:
+                            # Extract drive letter or UNC path
+                            parts = line.split()
+                            if len(parts) >= 2:
+                                connections_to_remove.append(parts[1])  # Usually the drive letter/path
+
+                    # Remove each connection
+                    success = True
+                    messages = []
+
+                    for conn in connections_to_remove:
+                        self.logger.info(f"Cleaning up SMB connection: {conn}")
+                        cleanup_result = subprocess.run(f'net use "{conn}" /delete /y',
+                                                      shell=True, capture_output=True, text=True)
+                        if cleanup_result.returncode != 0:
+                            success = False
+                            messages.append(f"Failed to cleanup {conn}: {cleanup_result.stderr}")
+                        else:
+                            messages.append(f"Cleaned up connection: {conn}")
+
+                    if connections_to_remove:
+                        message = "; ".join(messages)
+                        return success, message
+                    else:
+                        return True, f"No existing connections found to {target_ip}"
+
+                return True, "Connection cleanup completed"
+            else:
+                # For non-Windows systems, no cleanup needed
+                return True, "Connection cleanup not needed on this platform"
+
+        except Exception as e:
+            return False, f"Connection cleanup error: {str(e)}"
+
     def test_connection(self, target_ip: str, protocol: str, username: str = "", 
                        password: str = "", ssh_key_path: str = "") -> Tuple[bool, str]:
         """
@@ -232,22 +331,37 @@ class TransferManager:
             Tuple of (success: bool, message: str)
         """
         try:
-            if protocol.lower() == "scp":
-                # Test SSH connection
-                cmd = ["ssh", "-o", "ConnectTimeout=10", "-o", "BatchMode=yes"]
-                
-                if ssh_key_path and os.path.exists(ssh_key_path):
-                    cmd.extend(["-i", ssh_key_path])
-                
-                cmd.append(f"{username}@{target_ip}")
-                cmd.append("echo 'Connection test successful'")
-                
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
-                
-                if result.returncode == 0:
-                    return True, "SSH connection successful"
-                else:
-                    return False, f"SSH connection failed: {result.stderr}"
+            if protocol.lower() in ["scp", "ssh"]:
+                # Test SSH connection using paramiko
+                try:
+                    import paramiko
+
+                    ssh = paramiko.SSHClient()
+                    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+                    if ssh_key_path and os.path.exists(ssh_key_path):
+                        ssh.connect(target_ip, username=username, key_filename=ssh_key_path, timeout=10)
+                    else:
+                        ssh.connect(target_ip, username=username, password=password, timeout=10)
+
+                    # Test with a simple command
+                    stdin, stdout, stderr = ssh.exec_command("echo 'SSH connection test successful'")
+                    output = stdout.read().decode().strip()
+                    ssh.close()
+
+                    if "successful" in output:
+                        return True, "SSH connection successful"
+                    else:
+                        return False, "SSH connection test failed"
+
+                except paramiko.AuthenticationException:
+                    return False, "SSH authentication failed"
+                except paramiko.SSHException as e:
+                    return False, f"SSH connection error: {str(e)}"
+                except ImportError:
+                    return False, "paramiko library not available"
+                except Exception as e:
+                    return False, f"SSH connection failed: {str(e)}"
             
             elif protocol.lower() == "smb":
                 # Test SMB connection with ping

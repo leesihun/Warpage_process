@@ -49,7 +49,8 @@
       "Bash(python-3.12.9-amd64.exe /quiet InstallAllUsers=1 PrependPath=1 TargetDir=C:Python312)",
       "Bash(\"./DataAutoTransfer_v2.exe\" --help)",
       "Bash(move:*)",
-      "Bash(mv:*)"
+      "Bash(mv:*)",
+      "Bash(\"./dist/PEMTRON_Warpage_Tool.exe\" --test)"
     ],
     "deny": [],
     "ask": []

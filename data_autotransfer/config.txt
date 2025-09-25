@@ -3,7 +3,7 @@
 
 # Schedule Configuration
 SCHEDULE_TIME=
-SCHEDULE_TIMES=13:30
+SCHEDULE_TIMES=14:30
 TIMEZONE=Asia/Seoul
 
 # Source Configuration
@@ -13,7 +13,7 @@ FOLDER_PATTERN=%Y%m%d
 # Target Configuration
 TARGET_IP=10.252.38.241
 TARGET_DIRECTORY=gumi_s-aoi
-PROTOCOL=smb
+PROTOCOL=ssh
 USERNAME=s.hun.lee
 PASSWORD=atleast12!
 PASSWORD_FALLBACKS=qwerty12!
@@ -26,4 +26,11 @@ RETRY_DELAY=30
 DELETE_AFTER_TRANSFER=false
 LOG_LEVEL=INFO
 
-# For settings, allow protocol TCP, and remote port 22
+# Protocol Options:
+# - ssh: Use SSH/SFTP via paramiko (recommended - no system SSH required)
+# - scp: Use SSH/SFTP via paramiko (alias for ssh)
+# - smb: Use SMB/CIFS with automatic connection cleanup
+# - local: Copy to local directory
+#
+# Note: SSH protocol uses paramiko library and doesn't require system SSH installation
+# For network requirements: SSH uses port 22, SMB uses ports 445/139
