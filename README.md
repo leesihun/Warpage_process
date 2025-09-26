@@ -647,7 +647,12 @@ Cross-Origin Resource Sharing (CORS) is enabled for all endpoints to support web
 
 ## 🔄 Version History
 
-### v2.0.1 (Current)
+### v2.0.4 (Current)
+- ✅ Purged large binary from Git history and re-synced repository
+- ✅ Added `PEMTRON_Warpage_Tool.exe` to `.gitignore` to prevent future commits
+- ✅ Updated repository metadata to reflect history cleanup
+
+### v2.0.3
 - ✅ Fixed executable execution issues
 - ✅ Updated port configuration to 8080
 - ✅ Improved error handling and debugging
