@@ -2,11 +2,16 @@
 
 A powerful, user-friendly application for analyzing semiconductor warpage measurement data with advanced visualization and reporting capabilities.
 
-![Version](https://img.shields.io/badge/version-2.0.2-blue.svg)
+![Version](https://img.shields.io/badge/version-2.0.3-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.8+-green.svg)
 ![License](https://img.shields.io/badge/license-Proprietary-red.svg)
 
-## 🔧 Latest Updates (v2.0.2)
+## 🔧 Latest Updates (v2.0.3)
+
+### Improvements 🚀
+- Updated `build_nuitka.bat` with environment validation, cleaner logging, and safer shutdown handling for more reliable executable builds.
+
+## 🔧 Previous Updates (v2.0.2)
 
 ### Fixed Issues ✅
 - **CRITICAL FIX**: Resolved data loading issue where PEMTRON_MASKED and other folders would show "No data found" error despite containing valid files

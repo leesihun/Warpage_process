@@ -65,12 +65,16 @@ python -m nuitka ^
     --quiet ^
     web_server.py >"%BUILD_LOG%" 2>&1
 
+set "BUILD_EXIT=!ERRORLEVEL!"
+
+if !BUILD_EXIT! NEQ 0 (
+
 if errorlevel 1 (
     echo.
     echo ========================================
     echo BUILD FAILED! See %BUILD_LOG% for details.
     echo ========================================
-    powershell -Command "if(Test-Path '%BUILD_LOG%'){ $matches = Select-String -Path '%BUILD_LOG%' -Pattern 'ERROR','Traceback'; if($matches){ $matches | Select-Object -First 10; exit 0 } else { exit 1 } } else { exit 1 }"
+    powershell -Command "if(Test-Path '%BUILD_LOG%'){ $matches = Select-String -Path '%BUILD_LOG%' -SimpleMatch 'Error','ERROR','Traceback'; if($matches){ $matches | Select-Object -First 10; exit 0 } else { exit 1 } } else { exit 1 }"
     set "HAS_ERRORS=!ERRORLEVEL!"
     if !HAS_ERRORS! NEQ 0 (
         echo (No explicit errors detected in log preview.)
