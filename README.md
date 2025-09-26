@@ -2,14 +2,21 @@
 
 A powerful, user-friendly application for analyzing semiconductor warpage measurement data with advanced visualization and reporting capabilities.
 
-![Version](https://img.shields.io/badge/version-2.0.3-blue.svg)
+![Version](https://img.shields.io/badge/version-2.0.5-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.8+-green.svg)
 ![License](https://img.shields.io/badge/license-Proprietary-red.svg)
 
-## 🔧 Latest Updates (v2.0.3)
+## 🔧 Latest Updates (v2.0.5)
+
+### Fixed Issues ✅
+- **CRITICAL FIX**: Resolved Git large file issues that prevented repository synchronization
+- Fixed upstream branch configuration for seamless Git operations
+- Enhanced `.gitignore` to prevent future large file commits
 
 ### Improvements 🚀
-- Updated `build_nuitka.bat` with environment validation, cleaner logging, and safer shutdown handling for more reliable executable builds.
+- Confirmed web server port configuration set to 9410072 (as per PEMTRON_warpage project standards)
+- Improved repository management and deployment workflow
+- Streamlined development environment setup
 
 ## 🔧 Previous Updates (v2.0.2)
 
@@ -647,7 +654,13 @@ Cross-Origin Resource Sharing (CORS) is enabled for all endpoints to support web
 
 ## 🔄 Version History
 
-### v2.0.4 (Current)
+### v2.0.5 (Current)
+- ✅ Resolved Git large file repository issues
+- ✅ Fixed upstream branch configuration
+- ✅ Enhanced `.gitignore` with comprehensive executable exclusion
+- ✅ Confirmed port 9410072 configuration for PEMTRON_warpage project
+
+### v2.0.4
 - ✅ Purged large binary from Git history and re-synced repository
 - ✅ Added `PEMTRON_Warpage_Tool.exe` to `.gitignore` to prevent future commits
 - ✅ Updated repository metadata to reflect history cleanup
