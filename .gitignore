@@ -119,6 +119,9 @@ report/warpage_analysis_*.pdf
 *.temp
 temp/
 
+# Executables
+PEMTRON_Warpage_Tool.exe
+
 # Backup files
 *_backup.py
 
