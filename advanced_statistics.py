@@ -67,34 +67,55 @@ def calculate_advanced_statistics(data_array):
 
 def create_violin_plots(folder_data, figsize=(11.69, 8.27)):
     """
-    바이올린 플롯으로 분포 시각화 / Violin plots for distribution visualization
+    가속화된 바이올린 플롯 - 데이터 다운샘플링으로 성능 최적화
+    Ultra-fast violin plots - performance optimized with data downsampling
     """
     fig, ax = plt.subplots(figsize=figsize)
-    
-    # 데이터 준비 / Prepare data
+
+    # 데이터 준비 - 속도를 위해 다운샘플링 / Prepare data - downsample for speed
     data_list = []
     labels = []
-    
+    max_samples = 5000  # 최대 샘플 수 제한 / Limit max samples for speed
+
     for file_id, (data, stats, filename) in folder_data.items():
         valid_data = data[~np.isnan(data)].flatten()
+
+        # 데이터가 너무 크면 다운샘플링 / Downsample if data is too large
+        if len(valid_data) > max_samples:
+            # 균등한 간격으로 샘플링 / Sample at equal intervals
+            step = len(valid_data) // max_samples
+            valid_data = valid_data[::step]
+
         data_list.append(valid_data)
         labels.append(file_id.replace('File_', ''))
-    
-    # 바이올린 플롯 생성 / Create violin plot
-    parts = ax.violinplot(data_list, positions=range(len(data_list)), showmeans=True, showmedians=True)
-    
-    # 스타일링 / Styling
+
+    # 가속화된 바이올린 플롯 생성 / Create ultra-fast violin plot
+    # 세부 설정 비활성화로 속도 향상 / Disable detailed settings for speed
+    parts = ax.violinplot(data_list, positions=range(len(data_list)),
+                         showmeans=False, showmedians=False, showextrema=False)
+
+    # 최소한의 스타일링 / Minimal styling
     for pc in parts['bodies']:
         pc.set_facecolor('lightblue')
-        pc.set_alpha(0.7)
-    
-    ax.set_xlabel('Files', fontsize=12)
-    ax.set_ylabel('Warpage Values', fontsize=12)
-    ax.set_title('Warpage Distribution - Violin Plots', fontsize=14, fontweight='bold')
-    ax.set_xticks(range(len(labels)))
-    ax.set_xticklabels(labels)
-    ax.grid(True, alpha=0.3)
-    
+        pc.set_alpha(0.6)
+        pc.set_linewidth(0.5)  # 더 얘은 선 / Thinner lines
+
+    ax.set_xlabel('Files', fontsize=11)
+    ax.set_ylabel('Warpage Values', fontsize=11)
+    ax.set_title('Warpage Distribution - Fast Violin Plots', fontsize=13, fontweight='bold')
+
+    # 레이블 최적화 / Optimize labels
+    if len(labels) <= 10:
+        ax.set_xticks(range(len(labels)))
+        ax.set_xticklabels(labels, fontsize=9)
+    else:
+        # 너무 많으면 간격으로 표시 / Show every nth label if too many
+        step = max(1, len(labels) // 8)
+        ax.set_xticks(range(0, len(labels), step))
+        ax.set_xticklabels([labels[i] for i in range(0, len(labels), step)], fontsize=9)
+
+    ax.grid(True, alpha=0.2)  # 더 연한 그리드 / Lighter grid
+
     plt.tight_layout()
     return fig
 

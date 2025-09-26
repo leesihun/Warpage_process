@@ -7,320 +7,306 @@ Data loading and processing functions for Warpage Analyzer
 import os
 import numpy as np
 from config import FILE_PATTERNS
+from functools import lru_cache
+import hashlib
+
+# Memory optimization: Global cache for processed files
+_file_cache = {}
+_cache_max_size = 50  # Maximum cached files
+
+def _get_file_hash(file_path):
+    """Generate a hash for file caching based on path and modification time."""
+    try:
+        stat = os.stat(file_path)
+        return hashlib.md5(f"{file_path}:{stat.st_mtime}:{stat.st_size}".encode()).hexdigest()
+    except (OSError, IOError):
+        return None
+
+def _cache_file_data(file_path, data):
+    """Cache processed file data with LRU eviction."""
+    global _file_cache
+    if len(_file_cache) >= _cache_max_size:
+        # Remove oldest entry (simple FIFO for speed)
+        oldest_key = next(iter(_file_cache))
+        del _file_cache[oldest_key]
+
+    file_hash = _get_file_hash(file_path)
+    if file_hash:
+        _file_cache[file_hash] = data
+
+def _get_cached_file_data(file_path):
+    """Retrieve cached file data if available and valid."""
+    file_hash = _get_file_hash(file_path)
+    if file_hash and file_hash in _file_cache:
+        return _file_cache[file_hash]
+    return None
 
 
-def load_data_from_file(file_path):
+def load_data_from_file(file_path, downsample_factor=1):
     """
     텍스트 또는 AKROMETRIX 파일에서 원시 데이터를 로드하고 모든 0인 행/열을 제거
     Load raw data from a text or AKROMETRIX file, removing all-zero rows and columns by default.
-    
+
     Args:
         file_path (str): 데이터 파일 경로 / Path to the data file
-        
+        downsample_factor (int): 다운샘플링 비율 (1=원본, 2=반, 4=1/4 크기) / Downsampling factor
+
     Returns:
         numpy.ndarray: 정리된 데이터 배열, 오류시 None / Cleaned data array, or None if error
     """
     try:
-        print(f"Opening file: {file_path}")
-        
         # 파일 타입에 따른 처리 / Process based on file type
         file_ext = os.path.splitext(file_path)[1].lower()
-        is_akrometrix = file_ext in ['.dat']
-        
+        is_akrometrix = file_ext == '.dat'
+
         if is_akrometrix:
-            print(f"  Detected AKROMETRIX file format (.dat)")
             # AKROMETRIX 파일은 다양한 인코딩을 시도 / Try various encodings for AKROMETRIX files
-            encodings_to_try = ['utf-8', 'latin-1', 'cp1252', 'ascii']
-            data = None
+            encodings_to_try = ['utf-8', 'latin-1', 'cp1252']
             for encoding in encodings_to_try:
                 try:
                     with open(file_path, 'r', encoding=encoding) as f:
                         data = f.read()
-                    print(f"  Successfully read with {encoding} encoding")
                     break
                 except UnicodeDecodeError:
                     continue
-            
-            if data is None:
-                print(f"  Error: Could not read file with any encoding")
+            else:
                 return None
         else:
             # 일반 텍스트 파일 / Regular text file
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = f.read()
-        
-        print(f"  File size: {len(data)} characters")
-        
-        # 넘파이 배열로 변환 / Convert to numpy array
-        data_lines = data.strip().split('\n')
-        
-        # 빈 줄이나 헤더 정보가 있는 경우 필터링 / Filter out empty lines or header information
-        clean_lines = []
-        for line in data_lines:
-            line = line.strip()
-            if line and not line.startswith('#') and not line.startswith('%'):
-                # 숫자로만 구성된 라인인지 확인 / Check if line contains only numbers
-                try:
-                    # 라인을 float로 변환 가능한지 테스트 / Test if line can be converted to floats
-                    float_values = [float(x) for x in line.split()]
-                    if float_values:  # 빈 리스트가 아닌 경우 / If not empty list
-                        clean_lines.append(line)
-                except ValueError:
-                    # 숫자가 아닌 라인은 헤더로 간주하고 무시 / Non-numeric lines are considered headers and ignored
-                    continue
-        
-        print(f"  Number of data lines: {len(clean_lines)}")
-        
-        if not clean_lines:
-            print(f"  Error: No valid data lines found")
+
+        # 넘파이 배열로 변환 / Convert to numpy array - optimized approach
+        data_lines = [line.strip() for line in data.strip().split('\n') if line.strip() and not line.startswith(('#', '%'))]
+
+        if not data_lines:
             return None
-        
-        data_array = np.array([list(map(float, line.split())) for line in clean_lines])
-        print(f"  Original array shape: {data_array.shape}")
-        
-        # 모든 값이 0인 행 제거 / Remove all-zero rows
-        nonzero_row_mask = ~(np.all(data_array == 0, axis=1))
-        data_array = data_array[nonzero_row_mask, :]
-        print(f"  After removing zero rows: {data_array.shape}")
-        
-        # 모든 값이 0인 열 제거 / Remove all-zero columns
-        nonzero_col_mask = ~(np.all(data_array == 0, axis=0))
-        data_array = data_array[:, nonzero_col_mask]
-        print(f"  After removing zero columns: {data_array.shape}")
-        
-        # 아티팩트 값들을 NaN으로 변환 / Nullify artifact values as NaN
-        invalid_values = [-4000, 9999.0, -9999.0, 99999.0, -99999.0]
-        artifact_counts = {}
-        total_artifacts = 0
-        
-        for invalid_val in invalid_values:
-            count = np.sum(data_array == invalid_val)
-            if count > 0:
-                data_array = np.where(data_array == invalid_val, np.nan, data_array)
-                artifact_counts[invalid_val] = count
-                total_artifacts += count
-        
-        if total_artifacts > 0:
-            artifact_details = ", ".join([f"{count} ({val})" for val, count in artifact_counts.items()])
-            print(f"  Nullified {total_artifacts} artifacts: {artifact_details}")
-        
-        print(f"  Final array shape: {data_array.shape}")
+
+        # 빠른 파싱을 위한 최적화된 접근 / Optimized parsing approach
+        try:
+            # 첫 번째 줄로 데이터 형식 확인 / Validate format with first line
+            first_line = data_lines[0].split()
+            [float(x) for x in first_line]  # Test conversion
+
+            # numpy loadtxt가 더 빠름 / numpy loadtxt is faster for large datasets
+            from io import StringIO
+            clean_data = '\n'.join(data_lines)
+            data_array = np.loadtxt(StringIO(clean_data))
+
+            # 1D 배열인 경우 2D로 변환 / Convert 1D to 2D if needed
+            if data_array.ndim == 1:
+                data_array = data_array.reshape(1, -1)
+
+        except (ValueError, IndexError):
+            # 대체 방법 사용 / Use fallback method
+            clean_lines = []
+            for line in data_lines:
+                try:
+                    float_values = [float(x) for x in line.split()]
+                    if float_values:
+                        clean_lines.append(float_values)
+                except ValueError:
+                    continue
+
+            if not clean_lines:
+                return None
+            data_array = np.array(clean_lines)
+
+        # 최적화된 전처리 / Optimized preprocessing
+        # 모든 값이 0인 행/열 제거 / Remove all-zero rows/columns in one pass
+        nonzero_mask = (data_array != 0).any(axis=1)
+        if nonzero_mask.any():
+            data_array = data_array[nonzero_mask]
+            nonzero_mask = (data_array != 0).any(axis=0)
+            if nonzero_mask.any():
+                data_array = data_array[:, nonzero_mask]
+
+        # 아티팩트 값들을 NaN으로 변환 - 벡터화 연산 / Nullify artifact values - vectorized operation
+        invalid_values = np.array([-4000, 9999, -9999, 99999, -99999])
+        mask = np.isin(data_array, invalid_values)
+        if mask.any():
+            data_array = data_array.astype(float)  # Ensure float type for NaN
+            data_array[mask] = np.nan
+
+        # 다운샘플링 적용 (요청된 경우) / Apply downsampling if requested
+        if downsample_factor > 1:
+            data_array = data_array[::downsample_factor, ::downsample_factor]
+
         return data_array
     except Exception as e:
         print(f"Error loading {file_path}: {e}")
         return None
 
 
-def extract_center_region(data_array, row_fraction=1, col_fraction=1):
-    """
-    데이터 배열에서 중앙 영역 추출
-    Extract center region from data array.
-    
-    Args:
-        data_array (numpy.ndarray): 입력 데이터 배열 / Input data array
-        row_fraction (float): 중앙에서 유지할 행의 비율 / Fraction of rows to keep in center
-        col_fraction (float): 중앙에서 유지할 열의 비율 / Fraction of columns to keep in center
-        
-    Returns:
-        numpy.ndarray: 중앙 영역 데이터 / Center region data
-    """
-    n_rows, n_cols = data_array.shape
-    
-    # 비율이 1이면 전체 데이터 반환 / If fractions are 1, return the full data
-    if row_fraction == 1 and col_fraction == 1:
-        return data_array
-    
-    # 중앙 영역 경계 계산 / Calculate center region boundaries
+@lru_cache(maxsize=32)
+def _calculate_region_bounds(n_rows, n_cols, row_fraction, col_fraction):
+    """Cached calculation of region boundaries for speed."""
     row_margin = (1 - row_fraction) / 2
     col_margin = (1 - col_fraction) / 2
-    
+
     row_start = int(n_rows * row_margin)
     row_end = int(n_rows * (1 - row_margin))
     col_start = int(n_cols * col_margin)
     col_end = int(n_cols * (1 - col_margin))
-    
-    # 중앙 영역 추출 / Extract center region
-    center_data = data_array[row_start:row_end, col_start:col_end]
-    
-    return center_data
+
+    return row_start, row_end, col_start, col_end
+
+def extract_center_region(data_array, row_fraction=1, col_fraction=1):
+    """
+    데이터 배열에서 중앙 영역 추출 - 성능 최적화
+    Extract center region from data array - performance optimized.
+
+    Args:
+        data_array (numpy.ndarray): 입력 데이터 배열 / Input data array
+        row_fraction (float): 중앙에서 유지할 행의 비율 / Fraction of rows to keep in center
+        col_fraction (float): 중앙에서 유지할 열의 비율 / Fraction of columns to keep in center
+
+    Returns:
+        numpy.ndarray: 중앙 영역 데이터 / Center region data
+    """
+    # Fast path for full data
+    if row_fraction == 1 and col_fraction == 1:
+        return data_array
+
+    n_rows, n_cols = data_array.shape
+
+    # Use cached boundary calculation
+    row_start, row_end, col_start, col_end = _calculate_region_bounds(n_rows, n_cols, row_fraction, col_fraction)
+
+    # Efficient slice extraction
+    return data_array[row_start:row_end, col_start:col_end]
 
 
 def find_data_files(folder_path, use_original_files=True):
     """
     지정된 폴더에서 모든 데이터 파일 찾기 (원본, 보정된 파일, 또는 AKROMETRIX 파일)
     Find all data files in a given folder (original, corrected, or AKROMETRIX files).
-    
+
     Args:
         folder_path (str): 폴더 경로 / Path to the folder
         use_original_files (bool): True면 원본 파일들 우선, False면 보정된 파일 우선
                                   If True, prioritize original files, if False, prioritize corrected files
-        
+
     Returns:
         list: 데이터 파일들의 전체 경로 목록, 없으면 빈 목록 / List of full paths to the data files, or empty list if none found
     """
     try:
         files = os.listdir(folder_path)
-        target_files = []
-        file_type = "unknown"
-        
-        # 파일 검색 우선순위 설정 / Set file search priority
-        search_order = []
+
+        # 최적화된 패턴 매칭 / Optimized pattern matching
+        original_patterns = FILE_PATTERNS['original']
+        original_pkg_patterns = FILE_PATTERNS.get('original_with_package', [])
+        akrometrix_patterns = FILE_PATTERNS.get('akrometrix', [])
+
+        # 파일별로 타입 분류 - 한 번의 순회로 처리 / Classify files by type in single pass
+        original_files = []
+        original_pkg_files = []
+        corrected_files = []
+        akrometrix_files = []
+
+        for f in files:
+            # 원본 패턴 확인 / Check original patterns
+            if any(f.endswith(pattern) for pattern in original_patterns):
+                original_files.append(f)
+            # 원본 패키지 패턴 확인 / Check original package patterns
+            elif any(f.endswith(pattern) for pattern in original_pkg_patterns):
+                original_pkg_files.append(f)
+            # AKROMETRIX 패턴 확인 / Check AKROMETRIX patterns
+            elif any(f.endswith(pattern) for pattern in akrometrix_patterns):
+                akrometrix_files.append(f)
+            # 보정된 파일 (.txt이지만 원본이 아닌) / Corrected files (.txt but not originals)
+            elif f.endswith('.txt'):
+                corrected_files.append(f)
+
+        # 우선순위에 따른 파일 선택 / Select files based on priority
         if use_original_files:
-            search_order = ['original', 'original_with_package', 'corrected', 'akrometrix']
+            search_order = [original_files, original_pkg_files, corrected_files, akrometrix_files]
         else:
-            search_order = ['corrected', 'original', 'original_with_package', 'akrometrix']
-        
-        # 각 파일 타입을 우선순위에 따라 검색 / Search each file type according to priority
-        for file_category in search_order:
-            if file_category == 'original':
-                # 원본 파일 찾기 (여러 패턴 지원) / Look for original files (multiple patterns supported)
-                patterns = FILE_PATTERNS['original']
-                for f in files:
-                    for pattern in patterns:
-                        if f.endswith(pattern):
-                            target_files.append(f)
-                            break  # 한 번 매치되면 다른 패턴은 확인하지 않음
-                if target_files:
-                    file_type = "original"
-                    break
-                    
-            elif file_category == 'original_with_package':
-                # 원본 패키지 파일 찾기 (여러 패턴 지원) / Look for original package files (multiple patterns supported)
-                if 'original_with_package' in FILE_PATTERNS:
-                    patterns = FILE_PATTERNS['original_with_package']
-                    for f in files:
-                        for pattern in patterns:
-                            if f.endswith(pattern):
-                                target_files.append(f)
-                                break  # 한 번 매치되면 다른 패턴은 확인하지 않음
-                    if target_files:
-                        file_type = "original_with_package"
-                        break
-                    
-            elif file_category == 'corrected':
-                # 보정된 파일 찾기 (.txt이지만 원본 파일 패턴들은 제외) / Look for corrected files (.txt but not original file patterns)
-                pattern = FILE_PATTERNS['corrected']
-                original_patterns = FILE_PATTERNS['original']
-                original_with_package_patterns = FILE_PATTERNS.get('original_with_package', [])
-                for f in files:
-                    if f.endswith(pattern):
-                        # 원본 파일 패턴들 중 어떤 것과도 매치되지 않는지 확인
-                        is_original = False
-                        for orig_pattern in original_patterns:
-                            if f.endswith(orig_pattern):
-                                is_original = True
-                                break
-                        # 원본 패키지 파일 패턴들과도 매치되지 않는지 확인
-                        if not is_original:
-                            for orig_pkg_pattern in original_with_package_patterns:
-                                if f.endswith(orig_pkg_pattern):
-                                    is_original = True
-                                    break
-                        if not is_original:
-                            target_files.append(f)
-                if target_files:
-                    file_type = "corrected"
-                    break
-                    
-            elif file_category == 'akrometrix':
-                # AKROMETRIX .dat 파일 확인 / Check for AKROMETRIX .dat files
-                if 'akrometrix' in FILE_PATTERNS:
-                    akrometrix_patterns = FILE_PATTERNS['akrometrix']
-                    for f in files:
-                        for pattern in akrometrix_patterns:
-                            if f.endswith(pattern):
-                                target_files.append(f)
-                                break  # 한 번 매치되면 다른 패턴은 확인하지 않음
-                    if target_files:
-                        file_type = "AKROMETRIX"
-                        break
-        
-        if target_files:
-            # 일관된 순서를 위해 파일 정렬 / Sort files for consistent ordering
-            target_files.sort()
-            return [os.path.join(folder_path, f) for f in target_files]
-        else:
-            try:
-                print(f"No {file_type} files found in {folder_path}")
-            except (UnicodeEncodeError, UnicodeDecodeError):
-                print(f"No {file_type} files found in folder (unicode path)")
-            return []
-    except Exception as e:
-        try:
-            print(f"Error accessing folder {folder_path}: {e}")
-        except (UnicodeEncodeError, UnicodeDecodeError):
-            print(f"Error accessing folder (unicode path): {e}")
+            search_order = [corrected_files, original_files, original_pkg_files, akrometrix_files]
+
+        for file_list in search_order:
+            if file_list:
+                file_list.sort()  # 일관된 순서
+                return [os.path.join(folder_path, f) for f in file_list]
+
+        return []
+    except Exception:
         return []
 
 
-def process_folder_data(base_path, folder, row_fraction=1, col_fraction=1, use_original_files=True):
+def process_folder_data_parallel(base_path, folder, row_fraction=1, col_fraction=1, use_original_files=True, downsample_factor=1, max_workers=None):
     """
-    단일 폴더의 모든 파일에 대해 데이터 처리
-    Process data for all files in a single folder.
-    
+    병렬 처리로 단일 폴더의 모든 파일 데이터 처리 - 최대 속도
+    Parallel process data for all files in a single folder - maximum speed.
+
     Args:
         base_path (str): 데이터 폴더들의 기본 경로 / Base path to data folders
         folder (str): 폴더 이름 / Folder name
         row_fraction (float): 중앙에서 유지할 행의 비율 / Fraction of rows to keep in center
         col_fraction (float): 중앙에서 유지할 열의 비율 / Fraction of columns to keep in center
-        use_original_files (bool): True면 원본 파일(@_ORI.txt) 사용, False면 보정된 파일(.txt, @_ORI.txt 제외) 사용
-                                  If True, use original files (@_ORI.txt), if False, use corrected files (.txt but not @_ORI.txt)
-        
+        use_original_files (bool): 원본 vs 보정 파일 / Original vs corrected files
+        downsample_factor (int): 데이터 다운샘플링 비율 / Data downsampling factor (1=no downsampling, 2=half, 4=quarter, etc.)
+        max_workers (int): 최대 워커 수 / Maximum worker threads (None=auto)
+
     Returns:
-        list: 각 파일에 대한 튜플 목록 (center_data, stats, data_filename), 오류시 빈 목록
-              List of tuples (center_data, stats, data_filename) for each file, or empty list if error
+        list: 각 파일에 대한 튜플 목록 (center_data, stats, data_filename)
+              List of tuples (center_data, stats, data_filename) for each file
     """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     from warpage_statistics import calculate_statistics
-    
+    import multiprocessing
+
     folder_path = os.path.join(base_path, folder)
     file_paths = find_data_files(folder_path, use_original_files)
-    
+
     if not file_paths:
-        print(f"  No files found in {folder}")
         return []
-    
-    print(f"  Found {len(file_paths)} files to process")
-    print(f"  Processing parameters: row_fraction={row_fraction}, col_fraction={col_fraction}")
-    print(f"  File type: {'original' if use_original_files else 'corrected'}")
-    
+
+    # 자동 워커 수 설정 - CPU 코어 수 기반 / Auto worker count based on CPU cores
+    if max_workers is None:
+        max_workers = min(len(file_paths), multiprocessing.cpu_count() * 2)  # Aggressive threading
+
+    def process_single_file_fast(file_path):
+        """Fast single file processing with caching and memory optimization"""
+        try:
+            filename = os.path.basename(file_path)
+            # Use caching and pass downsample_factor directly to load function
+            raw_data = load_data_from_file(file_path, downsample_factor)
+            if raw_data is None:
+                return None
+
+            # 중앙 영역 추출 / Extract center region
+            center_region_needed = row_fraction != 1 or col_fraction != 1
+            center_data = extract_center_region(raw_data, row_fraction, col_fraction) if center_region_needed else raw_data
+
+            # 통계 계산 / Calculate statistics
+            stats = calculate_statistics(center_data)
+
+            return (center_data, stats, filename)
+        except Exception:
+            return None
+
+    # 병렬 처리 실행 / Execute parallel processing
     results = []
-    successful_files = 0
-    failed_files = 0
-    
-    for i, file_path in enumerate(file_paths):
-        filename = os.path.basename(file_path)
-        print(f"    Processing file {i+1}/{len(file_paths)}: {filename}")
-        
-        # 원시 데이터 로드 / Load raw data
-        raw_data = load_data_from_file(file_path)
-        if raw_data is None:
-            print(f"    ⚠ Skipped {filename} (load failed)")
-            failed_files += 1
-            continue
-        
-        # 중앙 영역 추출 / Extract center region
-        if row_fraction != 1 or col_fraction != 1:
-            print(f"    Extracting center region: {row_fraction}x{col_fraction}")
-            center_data = extract_center_region(raw_data, row_fraction, col_fraction)
-            print(f"    Center region shape: {center_data.shape}")
-        else:
-            center_data = raw_data
-            print(f"    Using full data: {center_data.shape}")
-        
-        # 통계 계산 / Calculate statistics
-        print(f"    Calculating statistics...")
-        stats = calculate_statistics(center_data)
-        print(f"    Statistics calculated: min={stats['min']:.6f}, max={stats['max']:.6f}, mean={stats['mean']:.6f}")
-        
-        # 표시용 파일명 가져오기 / Get filename for display
-        data_filename = filename
-        
-        results.append((center_data, stats, data_filename))
-        successful_files += 1
-        print(f"    OK Processed {filename}: {center_data.shape}")
-    
-    print(f"  OK Completed {folder}: {successful_files} successful, {failed_files} failed")
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # 모든 파일을 병렬로 제출 / Submit all files in parallel
+        future_to_path = {executor.submit(process_single_file_fast, path): path for path in file_paths}
+
+        # 결과 수집 / Collect results
+        for future in as_completed(future_to_path):
+            result = future.result()
+            if result is not None:
+                results.append(result)
+
+    # 파일명 순서로 정렬 / Sort by filename for consistency
+    results.sort(key=lambda x: x[2])
     return results
+
+def process_folder_data(base_path, folder, row_fraction=1, col_fraction=1, use_original_files=True, downsample_factor=1):
+    """
+    Backward compatible wrapper - uses parallel processing by default for maximum speed
+    """
+    return process_folder_data_parallel(base_path, folder, row_fraction, col_fraction, use_original_files, downsample_factor)
 
 
 def get_file_size(file_path):

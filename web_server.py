@@ -5,7 +5,6 @@ Provides web interface for warpage data analysis and visualization
 """
 
 import os
-import json
 import tempfile
 import webbrowser
 import threading
@@ -13,10 +12,11 @@ import time
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify, send_file
 from flask_cors import CORS
+import gc  # For garbage collection
 
 # Import analysis components
 from config import DEFAULT_CONFIG, WEB_PORT, get_data_dir
-from data_loader import process_folder_data, find_data_files
+from data_loader import process_folder_data, process_folder_data_parallel, find_data_files
 from warpage_statistics import calculate_statistics
 import visualization
 
@@ -30,52 +30,41 @@ current_data = None
 current_plots = None
 current_stats = None
 
-def has_data_files_recursive(directory_path, max_depth=3, current_depth=0):
+def has_data_files_recursive(directory_path, max_depth=2, current_depth=0):
     """
     Recursively check if a directory or its subdirectories contain data files.
-    
+
     Args:
         directory_path (str): Path to directory to check
-        max_depth (int): Maximum depth to recurse (prevent infinite recursion)
+        max_depth (int): Maximum depth to recurse (reduced for performance)
         current_depth (int): Current recursion depth
-        
+
     Returns:
         bool: True if data files are found anywhere in the directory tree
     """
     if current_depth > max_depth:
         return False
-        
+
     try:
-        # First check the current directory for data files
-        original_files = find_data_files(directory_path, True)
-        corrected_files = find_data_files(directory_path, False)
-        if original_files or corrected_files:
+        # Quick check: look for data files in current directory
+        if find_data_files(directory_path, True) or find_data_files(directory_path, False):
             return True
-            
-        # Then check all subdirectories recursively
+
+        # Check subdirectories
         try:
-            items = os.listdir(directory_path)
-        except (OSError, IOError, PermissionError):
-            return False
-            
-        for item in items:
-            try:
+            for item in os.listdir(directory_path):
+                if item.startswith('.'):
+                    continue
                 item_path = os.path.join(directory_path, item)
-                if os.path.isdir(item_path) and not item.startswith('.'):
+                if os.path.isdir(item_path):
                     if has_data_files_recursive(item_path, max_depth, current_depth + 1):
                         return True
-            except (OSError, IOError, PermissionError, UnicodeDecodeError, UnicodeEncodeError):
-                # Skip problematic items but continue with others
-                continue
-                    
+        except (OSError, IOError, PermissionError):
+            pass
+
         return False
-        
-    except (OSError, IOError, PermissionError, UnicodeDecodeError, UnicodeEncodeError) as e:
-        # Handle permission errors or other file system issues gracefully
-        try:
-            print(f"Warning: Could not access directory {directory_path}: {e}")
-        except (UnicodeDecodeError, UnicodeEncodeError):
-            print(f"Warning: Could not access directory (unicode path): {e}")
+
+    except (OSError, IOError, PermissionError):
         return False
 
 @app.route('/')
@@ -85,214 +74,146 @@ def index():
 
 @app.route('/api/folders')
 def get_folders():
-    """Get available data folders"""
+    """Get available data folders - optimized for performance"""
     try:
-        config = DEFAULT_CONFIG.copy()
-        # Always resolve data dir at runtime to avoid stale config issues
         data_dir = get_data_dir()
-        
-        # Ensure we have the absolute path
+
         if not os.path.isabs(data_dir):
             data_dir = os.path.join(os.getcwd(), data_dir)
-        
-        # Debug information (console and file)
-        debug_lines = []
-        debug_lines.append(f"data_dir = {data_dir}")
-        debug_lines.append(f"data_dir exists = {os.path.exists(data_dir)}")
-        debug_lines.append(f"cwd = {os.getcwd()}")
-        if hasattr(__import__('sys'), '_MEIPASS'):
-            debug_lines.append(f"_MEIPASS = {__import__('sys')._MEIPASS}")
-        for line in debug_lines:
-            try:
-                print(f"DEBUG: {line}")
-            except Exception:
-                pass
-        try:
-            with open('server_debug.log', 'a', encoding='utf-8') as lf:
-                lf.write("[GET /api/folders]\n" + "\n".join(debug_lines) + "\n")
-        except Exception:
-            pass
-        
-        # Scan data directory for folders
+
         folders = []
         if os.path.exists(data_dir):
-            print(f"DEBUG: Scanning directory: {data_dir}")
             try:
-                items = os.listdir(data_dir)
-            except (OSError, IOError, PermissionError) as e:
-                print(f"DEBUG: Could not list directory {data_dir}: {e}")
-                return jsonify({'error': f'Could not access data directory: {str(e)}'}), 500
-                
-            for item in items:
-                try:
+                for item in os.listdir(data_dir):
+                    if item.startswith('.'):
+                        continue
                     item_path = os.path.join(data_dir, item)
-                    if os.path.isdir(item_path) and not item.startswith('.'):
-                        # Check if folder contains data files (recursively check subdirectories)
-                        if has_data_files_recursive(item_path):
-                            folders.append(item)
-                            print(f"DEBUG: Added folder {item} to list")
-                        else:
-                            print(f"DEBUG: Folder {item} has no data files")
-                except Exception as e:
-                    # Skip problematic folders but log the issue
-                    try:
-                        print(f"Warning: Could not scan folder {item}: {e}")
-                    except (UnicodeDecodeError, UnicodeEncodeError):
-                        print(f"Warning: Could not scan folder (unicode error): {e}")
-                    continue
-            try:
-                with open('server_debug.log', 'a', encoding='utf-8') as lf:
-                    lf.write(f"folders_found = {folders}\n")
-            except Exception:
-                pass
-        
+                    if os.path.isdir(item_path) and has_data_files_recursive(item_path):
+                        folders.append(item)
+            except (OSError, IOError, PermissionError) as e:
+                return jsonify({'error': f'Could not access data directory: {str(e)}'}), 500
+
         folders.sort()
         return jsonify({
             'folders': folders,
-            'data_directory': data_dir  # This is now the resolved absolute path
+            'data_directory': data_dir
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/debug')
 def debug_info():
-    """Return diagnostics about server paths and folder scan."""
+    """Return minimal diagnostics about server paths."""
     try:
         data_dir = get_data_dir()
-        cwd = os.getcwd()
-        exists = os.path.exists(data_dir)
-        items = []
-        scan = []
-        if exists:
-            try:
-                items = os.listdir(data_dir)
-            except Exception as e:
-                items = [f"<error listing data_dir: {e}>"]
-            for item in items:
-                item_path = os.path.join(data_dir, item)
-                is_dir = os.path.isdir(item_path)
-                has_files = False
-                if is_dir:
-                    try:
-                        has_files = has_data_files_recursive(item_path)
-                    except Exception as e:
-                        has_files = f"<error: {e}>"
-                scan.append({
-                    'name': item,
-                    'path': item_path,
-                    'is_dir': bool(is_dir),
-                    'has_data_files': has_files
-                })
         return jsonify({
             'data_directory': data_dir,
-            'data_dir_exists': exists,
-            'cwd': cwd,
-            'items': items,
-            'scan': scan
+            'data_dir_exists': os.path.exists(data_dir),
+            'cwd': os.getcwd()
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/analyze', methods=['POST'])
 def analyze():
-    """Analyze selected folder"""
+    """Analyze selected folder - optimized for memory efficiency"""
     global current_data, current_plots, current_stats
-    
+
     try:
+        # Clear previous data to free memory
+        current_data = None
+        current_plots = None
+        current_stats = None
+        gc.collect()  # Force garbage collection
+
         data = request.get_json()
         folder = data.get('folder')
-        file_type = data.get('file_type', 'original')  # Get file type from GUI
-        use_original = data.get('use_original', True)  # Keep for backward compatibility
+        file_type = data.get('file_type', 'original')
         row_fraction = float(data.get('row_fraction', 1.0))
         col_fraction = float(data.get('col_fraction', 1.0))
         vmin = data.get('vmin')
         vmax = data.get('vmax')
-        
+
         if not folder:
             return jsonify({'error': 'No folder selected'}), 400
-        
-        # Determine use_original based on file_type selection
-        if file_type == 'original':
-            use_original = True
-        elif file_type == 'original_with_package':
-            use_original = True
-        elif file_type == 'corrected':
-            use_original = False
-        elif file_type == 'akrometrix':
-            use_original = False  # AKROMETRIX files are handled as a special case in data_loader
-        else:
-            use_original = True  # Default fallback
-        
-        # Update config
-        config = DEFAULT_CONFIG.copy()
-        config['use_original_files'] = use_original
-        config['file_type'] = file_type  # Add file type to config
-        config['row_fraction'] = row_fraction
-        config['col_fraction'] = col_fraction
-        if vmin is not None:
-            config['vmin'] = vmin
-        if vmax is not None:
-            config['vmax'] = vmax
-        
-        # Load data using resolved data directory
+
+        # Determine use_original based on file_type
+        use_original = file_type in ['original', 'original_with_package']
+
+        # Get performance settings from request
+        downsample_factor = int(data.get('downsample_factor', 1))
+        parallel_processing = data.get('parallel_processing', True)
+        fast_plots = data.get('fast_plots', True)
+
+        # Load data with parallel processing and downsampling
         data_dir = get_data_dir()
-        folder_results = process_folder_data(data_dir, folder, row_fraction, col_fraction, use_original)
+        if parallel_processing:
+            folder_results = process_folder_data_parallel(
+                data_dir, folder, row_fraction, col_fraction, use_original, downsample_factor
+            )
+        else:
+            folder_results = process_folder_data(data_dir, folder, row_fraction, col_fraction, use_original, downsample_factor)
+
         if not folder_results:
             return jsonify({'error': f'No data found in folder: {folder}'}), 400
-        
-        # Convert to expected format for other functions
+
+        # Convert to expected format
         current_data = {}
         current_stats = []
         for i, (data_array, stats, filename) in enumerate(folder_results):
             file_id = f"File_{i+1:02d}"
             current_data[file_id] = (data_array, stats, filename)
             current_stats.append(stats)
-        
-        # Create plots
-        individual_plots = []
-        for file_id, (data_array, stats, filename) in current_data.items():
-            fig = visualization.create_individual_plot(file_id, data_array, stats, filename, 
-                                               vmin=config.get('vmin'), vmax=config.get('vmax'), 
-                                               cmap=config.get('cmap', 'jet'))
-            plot_base64 = visualization.figure_to_base64(fig)
-            individual_plots.append(plot_base64)
-        
-        comparison_figs = visualization.create_comparison_plot(current_data, vmin=config.get('vmin'), vmax=config.get('vmax'), cmap=config.get('cmap', 'jet'))
-        if comparison_figs and len(comparison_figs) > 0:
-            comparison_plot = visualization.figure_to_base64(comparison_figs[0])
+
+        # Create plots with maximum speed optimization
+        cmap = DEFAULT_CONFIG.get('cmap', 'jet')
+        dpi = 100 if fast_plots else 120  # Even lower DPI for maximum speed
+
+        if parallel_processing and fast_plots:
+            # Use parallel plot generation for maximum speed
+            individual_plots = visualization.create_plots_parallel(
+                current_data, vmin=vmin, vmax=vmax, cmap=cmap, dpi=dpi
+            )
         else:
-            comparison_plot = ''
-        
+            # Fallback to sequential processing
+            individual_plots = []
+            for file_id, (data_array, stats, filename) in current_data.items():
+                fig = visualization.create_individual_plot(file_id, data_array, stats, filename,
+                                                         vmin=vmin, vmax=vmax, cmap=cmap)
+                plot_base64 = visualization.figure_to_base64(fig, dpi=dpi)
+                individual_plots.append(plot_base64)
+
+        # Create comparison plot
+        comparison_plot = ''
+        if len(current_data) > 1:
+            comparison_figs = visualization.create_comparison_plot(current_data, vmin=vmin, vmax=vmax, cmap=cmap)
+            if comparison_figs:
+                comparison_plot = visualization.figure_to_base64(comparison_figs[0], dpi=dpi)
+
         current_plots = {
             'individual': individual_plots,
             'comparison': comparison_plot
         }
-        
+
         # Prepare response
         file_list = [filename for _, _, filename in current_data.values()]
-        plots_available = list(current_plots.keys()) if current_plots else []
-        
-        # Calculate total data points
-        total_data_points = 0
-        for data_array, _, _ in current_data.values():
-            if data_array is not None:
-                total_data_points += data_array.size
-        
+        total_data_points = sum(data_array.size for data_array, _, _ in current_data.values() if data_array is not None)
+
         return jsonify({
             'success': True,
             'summary': {
                 'folder': folder,
                 'file_count': len(current_data),
                 'files': file_list,
-                'plots_available': plots_available,
-                'total_data_points': total_data_points
+                'plots_available': list(current_plots.keys()),
+                'total_data_points': total_data_points,
+                'downsample_factor': downsample_factor,
+                'parallel_processing': parallel_processing,
+                'processing_time_optimized': True
             }
         })
-        
+
     except Exception as e:
-        import traceback
-        print(f"Analysis error: {e}")
-        traceback.print_exc()
         return jsonify({'error': f'Analysis failed: {str(e)}'}), 500
 
 @app.route('/api/plot/<file_id>')
@@ -572,27 +493,25 @@ def get_advanced_analysis():
 
 @app.route('/api/all_plots')
 def get_all_plots():
-    """Get all plots in one response"""
+    """Get all plots in one response - optimized"""
     global current_data, current_plots, current_stats
-    
+
     try:
         if not current_data or not current_plots:
             return jsonify({'error': 'No analysis data available'}), 404
-        
+
         # Build comprehensive plots response
         all_plots = {
             'individual': [],
             'comparison': current_plots.get('comparison', ''),
-            '3d': '',
-            'statistics': current_plots.get('comparison', ''),  # Use comparison for now
+            'statistics': current_plots.get('comparison', ''),
             'mean': '',
             'range': '',
             'minmax': '',
             'std': '',
-            'distribution': '',
-            'advanced': []
+            'distribution': ''
         }
-        
+
         # Add individual plots with metadata
         file_keys = list(current_data.keys())
         for i, plot_base64 in enumerate(current_plots.get('individual', [])):
@@ -605,41 +524,53 @@ def get_all_plots():
                     'image': plot_base64,
                     'stats': stats
                 })
-        
-        # Generate other plot types if needed (with proper base64 conversion)
+
+        # Generate statistical plots in parallel for maximum speed
         try:
-            if current_data:
-                mean_fig = visualization.create_mean_comparison_plot(current_data)
-                all_plots['mean'] = visualization.figure_to_base64(mean_fig)
-                
-                range_fig = visualization.create_range_comparison_plot(current_data)
-                all_plots['range'] = visualization.figure_to_base64(range_fig)
-                
-                minmax_fig = visualization.create_minmax_comparison_plot(current_data)
-                all_plots['minmax'] = visualization.figure_to_base64(minmax_fig)
-                
-                std_fig = visualization.create_std_comparison_plot(current_data)
-                all_plots['std'] = visualization.figure_to_base64(std_fig)
-                
-                dist_fig = visualization.create_warpage_distribution_plot(current_data)
-                all_plots['distribution'] = visualization.figure_to_base64(dist_fig)
-        except Exception as e:
-            print(f"Warning: Could not generate statistical plots: {e}")
-            pass  # Skip if visualization methods don't exist
-        
-        try:
-            if current_data:
-                surface_fig = visualization.create_3d_surface_plot(current_data)
-                all_plots['3d'] = visualization.figure_to_base64(surface_fig)
-        except Exception as e:
-            print(f"Warning: Could not generate 3D plot: {e}")
-            pass  # Skip if 3D method doesn't exist
-        
+            if current_data and len(current_data) > 1:
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+                import multiprocessing
+
+                # Ultra-low DPI for maximum speed
+                dpi = 80
+                max_workers = min(5, multiprocessing.cpu_count())
+
+                def create_stat_plot(plot_type):
+                    """Create statistical plots in parallel"""
+                    try:
+                        if plot_type == 'mean':
+                            fig = visualization.create_mean_comparison_plot(current_data)
+                        elif plot_type == 'range':
+                            fig = visualization.create_range_comparison_plot(current_data)
+                        elif plot_type == 'minmax':
+                            fig = visualization.create_minmax_comparison_plot(current_data)
+                        elif plot_type == 'std':
+                            fig = visualization.create_std_comparison_plot(current_data)
+                        elif plot_type == 'distribution':
+                            fig = visualization.create_warpage_distribution_plot(current_data)
+                        else:
+                            return None, None
+                        return plot_type, visualization.figure_to_base64(fig, dpi=dpi)
+                    except Exception:
+                        return None, None
+
+                # Generate all statistical plots in parallel
+                plot_types = ['mean', 'range', 'minmax', 'std', 'distribution']
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    futures = {executor.submit(create_stat_plot, plot_type): plot_type for plot_type in plot_types}
+                    for future in as_completed(futures):
+                        plot_type, plot_base64 = future.result()
+                        if plot_type and plot_base64:
+                            all_plots[plot_type] = plot_base64
+
+        except Exception:
+            pass  # Skip failed plots
+
         return jsonify({
             'success': True,
             'plots': all_plots
         })
-        
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

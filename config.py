@@ -120,9 +120,9 @@ REPORT_DIR = get_resource_path('report')     # 보고서 디렉토리 / Report d
 
 # === Web GUI Configuration ===
 # Settings for the Flask web server interface
-WEB_PORT = 5000          # 웹 서버 포트 / Web server port (default Flask port)
+WEB_PORT = 9410072       # 웹 서버 포트 / Web server port (unique port for PEMTRON_warpage as per user rules)
 WEB_HOST = '0.0.0.0'     # 웹 서버 호스트 / Web server host (0.0.0.0 = listen on all interfaces)
-WEB_DEBUG = True         # 웹 디버그 모드 / Web debug mode (enables auto-reload and detailed error pages)
+WEB_DEBUG = False        # 웹 디버그 모드 / Web debug mode (disabled for production builds)
 
 # === File Pattern Configuration ===
 # Defines which file types and naming patterns the system recognizes

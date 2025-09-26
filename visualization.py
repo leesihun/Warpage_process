@@ -8,40 +8,123 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 import base64
 import io
-# Import Plotly for interactive visualizations
-import plotly.graph_objects as go
-import plotly.express as px
-from plotly.subplots import make_subplots
-import plotly.io as pio
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import multiprocessing
+
+# Lazy import for optional dependencies
+_plotly_available = None
+_plotly_modules = None
+
+def _import_plotly():
+    """Lazy import of Plotly modules to improve startup time."""
+    global _plotly_available, _plotly_modules
+    if _plotly_available is None:
+        try:
+            import plotly.graph_objects as go
+            import plotly.express as px
+            from plotly.subplots import make_subplots
+            import plotly.io as pio
+            _plotly_modules = {'go': go, 'px': px, 'make_subplots': make_subplots, 'pio': pio}
+            _plotly_available = True
+        except ImportError:
+            _plotly_available = False
+            _plotly_modules = None
+    return _plotly_available
+
 # 고급 통계 함수들 가져오기 / Import advanced statistics functions
-try:
-    from advanced_statistics import ADVANCED_PLOT_FUNCTIONS
-except ImportError:
-    ADVANCED_PLOT_FUNCTIONS = {}
+_ADVANCED_PLOT_FUNCTIONS = None
+
+def _get_advanced_functions():
+    """Lazy import of advanced statistics functions."""
+    global _ADVANCED_PLOT_FUNCTIONS
+    if _ADVANCED_PLOT_FUNCTIONS is None:
+        try:
+            from advanced_statistics import ADVANCED_PLOT_FUNCTIONS
+            _ADVANCED_PLOT_FUNCTIONS = ADVANCED_PLOT_FUNCTIONS
+        except ImportError:
+            _ADVANCED_PLOT_FUNCTIONS = {}
+    return _ADVANCED_PLOT_FUNCTIONS
 
 
-def figure_to_base64(fig):
+def figure_to_base64(fig, dpi=150, format='png', close_fig=True):
     """
-    Convert a matplotlib figure to a base64-encoded string.
-    
+    Convert a matplotlib figure to a base64-encoded string - optimized.
+
     Args:
         fig (matplotlib.figure.Figure): The figure to convert
-        
+        dpi (int): DPI for the output image
+        format (str): Image format ('png', 'jpeg')
+        close_fig (bool): Whether to close the figure after conversion
+
     Returns:
-        str: Base64-encoded PNG image
+        str: Base64-encoded image
     """
-    buffer = io.BytesIO()
-    fig.savefig(buffer, format='png', dpi=150, bbox_inches='tight')
-    buffer.seek(0)
-    image_png = buffer.getvalue()
-    buffer.close()
-    plt.close(fig)  # Clean up the figure to prevent memory leaks
-    
-    graphic = base64.b64encode(image_png)
-    return graphic.decode('utf-8')
+    # Use memory-efficient buffer
+    with io.BytesIO() as buffer:
+        fig.savefig(buffer, format=format, dpi=dpi, bbox_inches='tight',
+                   facecolor='white', edgecolor='none', pad_inches=0.05)  # Reduced padding
+        buffer.seek(0)
+        image_data = buffer.getvalue()
+
+    if close_fig:
+        plt.close(fig)  # Clean up the figure to prevent memory leaks
+
+    return base64.b64encode(image_data).decode('utf-8')
+
+def create_plots_parallel(folder_data, vmin=None, vmax=None, cmap='jet', dpi=120, max_workers=None):
+    """
+    Create all individual plots in parallel for maximum speed.
+
+    Args:
+        folder_data (dict): Dictionary with file_id as key and (data, stats, filename) as value
+        vmin, vmax (float): Color scale limits
+        cmap (str): Colormap name
+        dpi (int): DPI for plots (reduced for speed)
+        max_workers (int): Maximum worker threads
+
+    Returns:
+        list: List of base64-encoded plot images
+    """
+    if not folder_data:
+        return []
+
+    # Auto worker count based on CPU cores and number of plots
+    if max_workers is None:
+        max_workers = min(len(folder_data), multiprocessing.cpu_count())
+
+    def create_single_plot(item):
+        """Create a single plot - designed for parallel execution"""
+        file_id, (data, stats, filename) = item
+        try:
+            # Create figure with optimized settings
+            fig = create_individual_plot(file_id, data, stats, filename,
+                                       vmin=vmin, vmax=vmax, cmap=cmap, colorbar=True)
+            # Convert to base64 with specified DPI
+            plot_base64 = figure_to_base64(fig, dpi=dpi, close_fig=True)
+            return plot_base64
+        except Exception:
+            return None  # Skip failed plots
+
+    # Execute parallel plot generation
+    plots = []
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submit all plot generation tasks
+        future_to_item = {executor.submit(create_single_plot, item): item for item in folder_data.items()}
+
+        # Collect results in order
+        results = {}
+        for future in as_completed(future_to_item):
+            item = future_to_item[future]
+            file_id = item[0]
+            result = future.result()
+            if result is not None:
+                results[file_id] = result
+
+    # Return plots in original order
+    plots = [results.get(file_id) for file_id in folder_data.keys() if file_id in results]
+    return [plot for plot in plots if plot is not None]
 
 
 def get_readable_x_axis_ticks(x_pos, labels, max_labels=10):
@@ -71,117 +154,122 @@ def get_readable_x_axis_ticks(x_pos, labels, max_labels=10):
 
 def create_comparison_plot(folder_data, figsize=(11.69, 8.27), vmin=None, vmax=None, cmap='jet', colorbar=True):
     """
-    Create a comparison plot showing all files in 4x4 grid configuration.
-    
+    Create a comparison plot showing all files in 4x4 grid configuration - speed optimized.
+
     Args:
         folder_data (dict): Dictionary with file_id as key and (data, stats, filename) as value
         figsize (tuple): Figure size (width, height)
         vmin, vmax (float): Color scale limits
         cmap (str): Colormap name
         colorbar (bool): Whether to show colorbar
-        
+
     Returns:
         list: List of matplotlib figures (one or more pages)
     """
+    if not folder_data:
+        return []
+
     files = list(folder_data.items())
     n_files = len(files)
     files_per_page = 16  # 4x4 format
-    
     figures = []
-    
-    # Find consistent axis limits for all subplots
-    all_shapes = [data.shape for _, (data, stats, filename) in files if data is not None]
-    if all_shapes:
-        max_rows = max(shape[0] for shape in all_shapes)
-        max_cols = max(shape[1] for shape in all_shapes)
-    else:
-        max_rows, max_cols = 100, 100  # Default fallback
-    
-    # Process files in chunks of 16 (4x4 per page)
+
+    # Pre-calculate global vmin/vmax for consistency and speed
+    if vmin is None or vmax is None:
+        all_mins, all_maxs = [], []
+        for _, (data, _, _) in files:
+            if data is not None:
+                all_mins.append(np.nanmin(data))
+                all_maxs.append(np.nanmax(data))
+        if all_mins and all_maxs:
+            if vmin is None:
+                vmin = min(all_mins)
+            if vmax is None:
+                vmax = max(all_maxs)
+
+    # Process files in chunks
     for page_start in range(0, n_files, files_per_page):
         page_end = min(page_start + files_per_page, n_files)
         page_files = files[page_start:page_end]
         n_page_files = len(page_files)
-        
-        # Create 4x4 subplot layout
-        fig, axes = plt.subplots(4, 4, figsize=figsize)
-        fig.suptitle('Warpage Data Comparison', fontsize=16, fontweight='bold')
-        axes = axes.flatten()  # Flatten for easy indexing
-        
+
+        # Fast subplot creation
+        fig, axes = plt.subplots(4, 4, figsize=figsize, constrained_layout=True)
+        fig.suptitle('Warpage Data Comparison', fontsize=15, fontweight='bold')
+        axes_flat = axes.flatten()
+
+        # Batch plot creation for speed
+        images = []
         for i, (file_id, (data, stats, filename)) in enumerate(page_files):
-            if data is not None:
-                ax = axes[i]
-                im = ax.imshow(data, cmap=cmap, vmin=vmin, vmax=vmax)
-                
-                # Simplify file ID to just number
+            if data is not None and i < 16:
+                ax = axes_flat[i]
+                # Fast image rendering
+                im = ax.imshow(data, cmap=cmap, vmin=vmin, vmax=vmax, aspect='auto', interpolation='nearest')
+                images.append(im)
+
+                # Minimal text formatting
                 simple_file_id = file_id.replace('File_', '')
-                ax.set_title(f'{simple_file_id}\n{filename}', fontsize=8, fontweight='bold')
-                ax.set_aspect('equal')
-                
-                # Set consistent axis limits
-                ax.set_xlim(0, max_cols)
-                ax.set_ylim(max_rows, 0)  # Inverted y-axis for image display
-                
-                # Remove tick labels for cleaner look
-                ax.set_xticks([])
-                ax.set_yticks([])
-                
-                # Add statistics text (smaller for 4x4 grid)
-                stats_text = f"Min: {stats['min']:.3f}\nMax: {stats['max']:.3f}\nMean: {stats['mean']:.3f}"
-                ax.text(0.02, 0.98, stats_text, transform=ax.transAxes, fontsize=6,
-                        verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
-        
-        # Hide unused subplots
+                ax.set_title(f'{simple_file_id}\n{filename}', fontsize=7, fontweight='bold')
+                ax.axis('off')  # Faster than individual tick removal
+
+                # Reduced statistics for speed
+                stats_text = f"Min: {stats['min']:.1f}\nMax: {stats['max']:.1f}\nMean: {stats['mean']:.1f}"
+                ax.text(0.02, 0.98, stats_text, transform=ax.transAxes, fontsize=5,
+                        verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.7))
+
+        # Hide unused subplots efficiently
         for j in range(n_page_files, 16):
-            axes[j].set_visible(False)
-        
-        # Add colorbar if requested (only one for the entire figure)
-        if colorbar and n_page_files > 0:
-            fig.colorbar(im, ax=[ax for ax in axes[:n_page_files]], shrink=0.6, label='Warpage Value')
-        
-        plt.tight_layout()
+            axes_flat[j].set_visible(False)
+
+        # Single colorbar for efficiency
+        if colorbar and images:
+            fig.colorbar(images[0], ax=axes_flat[:n_page_files], shrink=0.6, label='Warpage Value')
+
         figures.append(fig)
-    
+
     return figures
 
 
 def create_comprehensive_advanced_analysis(folder_data, figsize=(8.27, 11.69)):
     """
     종합 고급 분석 보고서 생성 / Create comprehensive advanced analysis report
-    
+
     Args:
         folder_data (dict): 파일 데이터 / File data
         figsize (tuple): 그래프 크기 / Figure size
-        
+
     Returns:
         list: 고급 분석 그래프들의 목록 / List of advanced analysis figures
     """
+    if not folder_data:
+        return []
+
     figures = []
-    
+    advanced_functions = _get_advanced_functions()
+
     # 고급 분석 그래프들 생성 (성능을 위해 핵심 분석만 선택) / Generate essential advanced analysis plots for performance
     plot_configs = [
         ('violin_plots', 'Distribution Analysis - Violin Plots'),
         ('percentile_analysis', 'Percentile Analysis'),
         ('gradient_analysis', 'Spatial Gradient Analysis')
     ]
-    
+
     for plot_key, plot_title in plot_configs:
-        if plot_key in ADVANCED_PLOT_FUNCTIONS:
+        if plot_key in advanced_functions:
             try:
-                fig = ADVANCED_PLOT_FUNCTIONS[plot_key](folder_data)
+                fig = advanced_functions[plot_key](folder_data)
                 if fig:
                     figures.append((fig, plot_title))
-                    print(f"  OK Generated: {plot_title}")
-            except Exception as e:
-                print(f"  WARNING: Failed to generate {plot_title}: {e}")
-    
+            except Exception:
+                pass  # Skip failed plots silently
+
     return figures
 
 
 def create_individual_plot(file_id, data, stats, filename, figsize=(8.27, 11.69), vmin=None, vmax=None, cmap='jet', colorbar=True):
     """
-    Create an individual plot for a single file with consistent scaling.
-    
+    Create an individual plot for a single file with TRUE SCALE aspect ratio - optimized for speed.
+
     Args:
         file_id (str): File identifier
         data (numpy.ndarray): Data array
@@ -191,86 +279,106 @@ def create_individual_plot(file_id, data, stats, filename, figsize=(8.27, 11.69)
         vmin, vmax (float): Color scale limits
         cmap (str): Colormap name
         colorbar (bool): Whether to show colorbar
-        
+
     Returns:
         matplotlib.figure.Figure: The created figure
     """
-    fig, ax = plt.subplots(figsize=figsize)
-    
-    # Handle NaN values in visualization
-    data_for_plot = np.ma.masked_invalid(data)
-    im = ax.imshow(data_for_plot, cmap=cmap, vmin=vmin, vmax=vmax)
-    # Simplify file ID to just number
+    # Use faster subplot creation
+    fig, ax = plt.subplots(figsize=figsize, constrained_layout=True)
+
+    # Optimized data handling
+    if np.isnan(data).any():
+        data_for_plot = np.ma.masked_invalid(data)
+    else:
+        data_for_plot = data
+
+    # TRUE SCALE display - use 'equal' aspect ratio for correct PCB representation
+    im = ax.imshow(data_for_plot, cmap=cmap, vmin=vmin, vmax=vmax, aspect='equal', interpolation='nearest')
+
+    # Simplified styling
     simple_file_id = file_id.replace('File_', '')
-    ax.set_title(f'{simple_file_id} - {filename}', fontweight='bold', fontsize=12)
-    ax.set_aspect('equal')
-    
-    # Set consistent axis scaling
-    ax.set_xlim(0, data.shape[1])
-    ax.set_ylim(data.shape[0], 0)  # Inverted y-axis for image display
-    
-    # Remove tick labels for cleaner look
-    ax.set_xticks([])
-    ax.set_yticks([])
-    
-    # Add colorbar if requested
+    ax.set_title(f'{simple_file_id} - {filename}', fontweight='bold', fontsize=11)
+
+    # Set axis labels for proper orientation
+    ax.set_xlabel('X Position (pixels)', fontsize=9)
+    ax.set_ylabel('Y Position (pixels)', fontsize=9)
+
+    # Show some ticks for scale reference but keep them minimal
+    rows, cols = data.shape
+    ax.set_xticks(np.linspace(0, cols-1, 5))
+    ax.set_yticks(np.linspace(0, rows-1, 5))
+    ax.tick_params(axis='both', which='major', labelsize=8)
+
+    # Streamlined colorbar
     if colorbar:
-        cbar = fig.colorbar(im, ax=ax, shrink=0.5)  # Make colorbar shorter
-        cbar.set_label('Warpage Value', fontsize=10)
-        
-        # Add statistics text above the colorbar
-        stats_text = f"Shape: {stats['shape']}\nMin: {stats['min']:.6f}\nMax: {stats['max']:.6f}\nMean: {stats['mean']:.6f}\nStd: {stats['std']:.6f}"
-        cbar.ax.text(0.5, 1.1, stats_text, transform=cbar.ax.transAxes, 
+        cbar = fig.colorbar(im, ax=ax, shrink=0.5)
+        cbar.set_label('Warpage Value (μm)', fontsize=9)
+
+        # Compact statistics with reduced precision for speed
+        stats_text = f"Shape: {stats['shape']}\nMin: {stats['min']:.3f}\nMax: {stats['max']:.3f}\nMean: {stats['mean']:.3f}\nStd: {stats['std']:.3f}"
+        cbar.ax.text(0.5, 1.02, stats_text, transform=cbar.ax.transAxes,
                     verticalalignment='bottom', horizontalalignment='center',
-                    bbox=dict(boxstyle='round', facecolor='white', alpha=0.9), fontsize=9)
-    
-    plt.tight_layout(pad=0.5)
+                    bbox=dict(boxstyle='round', facecolor='white', alpha=0.8), fontsize=8)
+
     return fig
 
 
 def create_3d_surface_plot(folder_data, figsize=(11.69, 8.27)):
     """
-    Create 3D surface plots for all files.
-    
+    Create highly optimized 3D surface plots for maximum speed.
+
     Args:
         folder_data (dict): Dictionary with file_id as key and (data, stats, filename) as value
         figsize (tuple): Figure size
-        
+
     Returns:
         matplotlib.figure.Figure: The created figure
     """
-    fig = plt.figure(figsize=figsize)
-    fig.suptitle('3D Surface Plots - Warpage Data', fontsize=16, fontweight='bold')
-    
-    # Dynamically calculate plot positions based on number of files
-    n_files = len(folder_data)
-    n_cols = min(4, n_files)  # Max 4 columns
-    n_rows = (n_files + n_cols - 1) // n_cols  # Calculate rows needed
-    
-    for i, (file_id, (data, stats, filename)) in enumerate(folder_data.items()):
-        if data is not None and i < 16:  # Limit to 16 plots to avoid overcrowding
+    if not folder_data:
+        return None
+
+    # Import 3D plotting only when needed
+    from mpl_toolkits.mplot3d import Axes3D
+
+    fig = plt.figure(figsize=figsize, constrained_layout=True)
+    fig.suptitle('3D Surface Plots - Warpage Data', fontsize=15, fontweight='bold')
+
+    # Limit to 6 plots for maximum performance
+    files_to_plot = list(folder_data.items())[:6]
+    n_files = len(files_to_plot)
+    n_cols = min(3, n_files)  # 3 columns max for speed
+    n_rows = (n_files + n_cols - 1) // n_cols
+
+    for i, (file_id, (data, stats, filename)) in enumerate(files_to_plot):
+        if data is not None:
             ax = fig.add_subplot(n_rows, n_cols, i + 1, projection='3d')
-            
-            # Create coordinate meshes
-            rows, cols = data.shape
+
+            # Aggressive downsampling for 3D performance
+            if data.shape[0] > 50 or data.shape[1] > 50:
+                step_row = max(1, data.shape[0] // 30)  # More aggressive
+                step_col = max(1, data.shape[1] // 30)
+                data_sampled = data[::step_row, ::step_col]
+            else:
+                data_sampled = data
+
+            rows, cols = data_sampled.shape
             x = np.arange(cols)
             y = np.arange(rows)
             X, Y = np.meshgrid(x, y)
-            
-            # Create surface plot
-            surf = ax.plot_surface(X, Y, data, cmap='viridis', alpha=0.8)
-            
-            # Simplify file ID to just number
+
+            # Highly optimized surface plot
+            surf = ax.plot_surface(X, Y, data_sampled, cmap='viridis', alpha=0.7,
+                                 rcount=min(30, rows), ccount=min(30, cols),  # Lower resolution
+                                 linewidth=0, antialiased=False)  # Disable anti-aliasing for speed
+
+            # Minimal labeling for speed
             simple_file_id = file_id.replace('File_', '')
-            ax.set_title(f'{simple_file_id}\n{filename}', fontweight='bold', fontsize=10)
-            ax.set_xlabel('X')
-            ax.set_ylabel('Y')
-            ax.set_zlabel('Warpage')
-            
-            # Add colorbar
-            fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5)
-    
-    plt.tight_layout()
+            ax.set_title(f'{simple_file_id}', fontweight='bold', fontsize=9)
+            # Remove axis labels for speed
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.set_zticks([])
+
     return fig
 
 

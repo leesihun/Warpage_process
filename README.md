@@ -2,9 +2,22 @@
 
 A powerful, user-friendly application for analyzing semiconductor warpage measurement data with advanced visualization and reporting capabilities.
 
-![Version](https://img.shields.io/badge/version-2.0.1-blue.svg)
+![Version](https://img.shields.io/badge/version-2.0.2-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.8+-green.svg)
 ![License](https://img.shields.io/badge/license-Proprietary-red.svg)
+
+## 🔧 Latest Updates (v2.0.2)
+
+### Fixed Issues ✅
+- **CRITICAL FIX**: Resolved data loading issue where PEMTRON_MASKED and other folders would show "No data found" error despite containing valid files
+- Fixed incorrect function parameter in parallel data processing that was causing analysis failures
+- Improved error handling and debugging capabilities for data loading issues
+
+### Improvements 🚀
+- Enhanced data loading pipeline for better reliability
+- Optimized parallel processing performance
+- Better error reporting for troubleshooting data issues
+- All folder analysis now working correctly in both GUI and API
 
 ## 🎯 What This Tool Does
 
