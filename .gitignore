@@ -119,8 +119,11 @@ report/warpage_analysis_*.pdf
 *.temp
 temp/
 
-# Executables
+# Executables - All executable files
+*.exe
 PEMTRON_Warpage_Tool.exe
+DataAutoTransfer.exe
+web_server.exe
 
 # Backup files
 *_backup.py
