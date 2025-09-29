@@ -12,6 +12,9 @@ from config import REPORT_DIR
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import gc  # For garbage collection
+import multiprocessing
+from concurrent.futures import ProcessPoolExecutor, as_completed
+import time
 
 # Lazy imports for better performance
 def _import_visualization():
@@ -28,6 +31,119 @@ def _import_advanced_stats():
                 'create_cover_page': create_cover_page,
                 'create_table_of_contents': create_table_of_contents}
     except ImportError:
+        return None
+
+
+def _process_single_file_plots_worker(file_data_tuple, dpi=150):
+    """
+    Worker function for multiprocessing - generates all 5 analysis plots for a single file.
+    각 파일에 대한 5개 분석 플롯을 생성하는 멀티프로세싱 워커 함수.
+    
+    Args:
+        file_data_tuple: (file_id, data, stats, filename) tuple
+        dpi: DPI for plot generation
+        
+    Returns:
+        dict: Dictionary with plot types as keys and base64 figures as values
+    """
+    try:
+        file_id, data, stats, filename = file_data_tuple
+        single_file_data = {file_id: (data, stats, filename)}
+        
+        # A4 landscape size for consistency
+        A4_LANDSCAPE_WIDTH = 11.69
+        A4_LANDSCAPE_HEIGHT = 8.27
+        
+        # Import required modules within worker
+        import matplotlib
+        matplotlib.use('Agg')  # Use non-interactive backend
+        import matplotlib.pyplot as plt
+        import base64
+        import io
+        import gc
+        
+        # Import visualization functions
+        import visualization
+        
+        plots = {}
+        
+        try:
+            # 1. 3D surface plot
+            surface_fig = visualization.create_3d_surface_plot(single_file_data, figsize=(A4_LANDSCAPE_WIDTH, A4_LANDSCAPE_HEIGHT), optimize_for_pdf=True)
+            if surface_fig and len(surface_fig) > 0:
+                buffer = io.BytesIO()
+                surface_fig[0].savefig(buffer, format='png', dpi=dpi, bbox_inches='tight')
+                buffer.seek(0)
+                plots['3d_surface'] = base64.b64encode(buffer.getvalue()).decode('utf-8')
+                plt.close(surface_fig[0])
+                buffer.close()
+        except Exception as e:
+            print(f"Failed to generate 3D surface plot for {file_id}: {e}")
+            
+        try:
+            # 2. Gradient magnitude analysis
+            from advanced_statistics import create_gradient_analysis
+            grad_figs = create_gradient_analysis(single_file_data, figsize=(A4_LANDSCAPE_WIDTH, A4_LANDSCAPE_HEIGHT))
+            if grad_figs and len(grad_figs) > 0:
+                buffer = io.BytesIO()
+                grad_figs[0].savefig(buffer, format='png', dpi=dpi, bbox_inches='tight')
+                buffer.seek(0)
+                plots['gradient'] = base64.b64encode(buffer.getvalue()).decode('utf-8')
+                plt.close(grad_figs[0])
+                buffer.close()
+        except Exception as e:
+            print(f"Failed to generate gradient plot for {file_id}: {e}")
+            
+        try:
+            # 3. Contour plots
+            from advanced_statistics import create_contour_plots
+            contour_figs = create_contour_plots(single_file_data, figsize=(A4_LANDSCAPE_WIDTH, A4_LANDSCAPE_HEIGHT))
+            if contour_figs and len(contour_figs) > 0:
+                buffer = io.BytesIO()
+                contour_figs[0].savefig(buffer, format='png', dpi=dpi, bbox_inches='tight')
+                buffer.seek(0)
+                plots['contour'] = base64.b64encode(buffer.getvalue()).decode('utf-8')
+                plt.close(contour_figs[0])
+                buffer.close()
+        except Exception as e:
+            print(f"Failed to generate contour plot for {file_id}: {e}")
+            
+        try:
+            # 4. Hotspot analysis
+            from advanced_statistics import create_hotspot_analysis
+            hotspot_figs = create_hotspot_analysis(single_file_data, figsize=(A4_LANDSCAPE_WIDTH, A4_LANDSCAPE_HEIGHT))
+            if hotspot_figs and len(hotspot_figs) > 0:
+                buffer = io.BytesIO()
+                hotspot_figs[0].savefig(buffer, format='png', dpi=dpi, bbox_inches='tight')
+                buffer.seek(0)
+                plots['hotspot'] = base64.b64encode(buffer.getvalue()).decode('utf-8')
+                plt.close(hotspot_figs[0])
+                buffer.close()
+        except Exception as e:
+            print(f"Failed to generate hotspot plot for {file_id}: {e}")
+            
+        try:
+            # 5. Local variability
+            from advanced_statistics import create_heatmap_overlays
+            variability_figs = create_heatmap_overlays(single_file_data, figsize=(A4_LANDSCAPE_WIDTH, A4_LANDSCAPE_HEIGHT))
+            if variability_figs and len(variability_figs) > 0:
+                buffer = io.BytesIO()
+                variability_figs[0].savefig(buffer, format='png', dpi=dpi, bbox_inches='tight')
+                buffer.seek(0)
+                plots['local_variability'] = base64.b64encode(buffer.getvalue()).decode('utf-8')
+                plt.close(variability_figs[0])
+                buffer.close()
+        except Exception as e:
+            print(f"Failed to generate local variability plot for {file_id}: {e}")
+        
+        # Clean up
+        plt.close('all')
+        gc.collect()
+        
+        return {'file_id': file_id, 'plots': plots}
+        
+    except Exception as e:
+        print(f"Error in worker for {file_data_tuple[0] if len(file_data_tuple) > 0 else 'unknown'}: {e}")
         return None
 
 
@@ -118,40 +234,79 @@ def export_to_pdf_from_webui_plots(plots_data, folder_data, output_filename='war
             pdf.savefig(legend_fig, dpi=dpi, bbox_inches='tight')
             plt.close(legend_fig)
         
-        # Pages 4 onwards: Individual plots (from web UI)
+        # Pages 4 onwards: Individual plots with detailed analysis (from web UI)
         if 'individual' in plots_data:
-            print(f"Adding {len(plots_data['individual'])} individual plots from web UI...")
+            print(f"Adding {len(plots_data['individual'])} individual plots with detailed analysis from web UI...")
+            
+            # First, generate all detailed analysis plots in parallel
+            print("Generating detailed analysis plots in parallel...")
+            start_time = time.time()
+            
+            # Prepare data for parallel processing
+            file_data_tuples = []
+            plot_info_map = {}
             for i, plot_info in enumerate(plots_data['individual']):
-                print(f"  Adding individual plot {i+1}/{len(plots_data['individual'])}: {plot_info['file_id']}")
-                fig = base64_to_figure(plot_info['image'], figsize=(A4_WIDTH, A4_HEIGHT))
+                file_id = plot_info['file_id']
+                plot_info_map[file_id] = plot_info
+                if file_id in folder_data:
+                    data, stats, filename = folder_data[file_id]
+                    file_data_tuples.append((file_id, data, stats, filename))
+            
+            # Generate all detailed plots using multiprocessing
+            detailed_plots_map = {}
+            if file_data_tuples:
+                max_workers = min(len(file_data_tuples), multiprocessing.cpu_count())
+                print(f"Using {max_workers} processes to generate {len(file_data_tuples)} file analysis sets...")
+                
+                with ProcessPoolExecutor(max_workers=max_workers) as executor:
+                    # Submit all tasks
+                    future_to_file = {executor.submit(_process_single_file_plots_worker, file_tuple, dpi): file_tuple[0] for file_tuple in file_data_tuples}
+                    
+                    # Collect results
+                    completed = 0
+                    for future in as_completed(future_to_file):
+                        result = future.result()
+                        if result:
+                            detailed_plots_map[result['file_id']] = result['plots']
+                        completed += 1
+                        if completed % 5 == 0 or completed == len(file_data_tuples):
+                            print(f"  Progress: {completed}/{len(file_data_tuples)} file analysis sets completed ({(completed/len(file_data_tuples)*100):.1f}%)")
+                
+                elapsed = time.time() - start_time
+                print(f"Parallel plot generation completed in {elapsed:.2f}s ({len(detailed_plots_map)} file sets generated)")
+            
+            # Now add all plots to PDF in order
+            visualization = _import_visualization()
+            for i, plot_info in enumerate(plots_data['individual']):
+                file_id = plot_info['file_id']
+                print(f"  Adding individual plot {i+1}/{len(plots_data['individual'])}: {file_id}")
+
+                # Main sample plot (landscape mode for consistency with detailed analysis plots)
+                fig = base64_to_figure(plot_info['image'], figsize=(A4_LANDSCAPE_WIDTH, A4_LANDSCAPE_HEIGHT))
                 pdf.savefig(fig, dpi=dpi, bbox_inches='tight')
                 plt.close(fig)
-        
-        # Statistical comparison pages (from web UI)
-        print("Adding statistical analysis plots from web UI...")
-        
-        # Add statistical comparison plot
-        if 'statistics' in plots_data:
-            print("  Adding statistical comparison plot...")
-            fig = base64_to_figure(plots_data['statistics'], figsize=(A4_WIDTH, A4_HEIGHT))
-            pdf.savefig(fig, dpi=dpi, bbox_inches='tight')
-            plt.close(fig)
-        
-        # Add individual statistical plots
-        stat_plots = ['mean', 'range', 'minmax', 'std']
-        for stat_name in stat_plots:
-            if stat_name in plots_data:
-                print(f"  Adding {stat_name} comparison plot...")
-                fig = base64_to_figure(plots_data[stat_name], figsize=(A4_WIDTH, A4_HEIGHT))
-                pdf.savefig(fig, dpi=dpi, bbox_inches='tight')
-                plt.close(fig)
-        
-        # Add distribution plot
-        if 'distribution' in plots_data:
-            print("  Adding distribution plot...")
-            fig = base64_to_figure(plots_data['distribution'], figsize=(A4_WIDTH, A4_HEIGHT))
-            pdf.savefig(fig, dpi=dpi, bbox_inches='tight')
-            plt.close(fig)
+
+                # Add pre-generated detailed analysis plots for this file
+                if file_id in detailed_plots_map:
+                    plots = detailed_plots_map[file_id]
+                    print(f"    Adding pre-generated detailed analysis plots for {file_id}...")
+                    
+                    # Add plots in the correct order
+                    plot_order = ['3d_surface', 'gradient', 'contour', 'hotspot', 'local_variability']
+                    for plot_type in plot_order:
+                        if plot_type in plots:
+                            try:
+                                fig = base64_to_figure(plots[plot_type], figsize=(A4_LANDSCAPE_WIDTH, A4_LANDSCAPE_HEIGHT))
+                                pdf.savefig(fig, dpi=dpi, bbox_inches='tight')
+                                plt.close(fig)
+                                print(f"      Added {plot_type} plot for {file_id}")
+                            except Exception as e:
+                                print(f"      Failed to add {plot_type} plot for {file_id}: {e}")
+                else:
+                    print(f"    Warning: No detailed analysis plots found for {file_id}")
+
+                # Force garbage collection after each file to manage memory
+                gc.collect()
         
         # Add advanced analysis plots (from web UI)
         if 'advanced' in plots_data:
@@ -165,11 +320,25 @@ def export_to_pdf_from_webui_plots(plots_data, folder_data, output_filename='war
                 'Hotspot Analysis'
             }
             
+            # Plots to exclude because they're already added individually for each sample
+            plots_to_exclude = {
+                'Gradient Magnitude Analysis',
+                'Contour Analysis',
+                'Hotspot Analysis',
+                'Local Variability'
+            }
+            
             for i, advanced_plot in enumerate(plots_data['advanced']):
-                print(f"  Adding advanced plot {i+1}/{len(plots_data['advanced'])}: {advanced_plot['title']}")
+                plot_title = advanced_plot.get('title', '')
+                
+                # Skip plots that are already added for each individual sample
+                if any(exclude_keyword in plot_title for exclude_keyword in plots_to_exclude):
+                    print(f"  Skipping advanced plot {i+1}/{len(plots_data['advanced'])}: {plot_title} (already added per sample)")
+                    continue
+                    
+                print(f"  Adding advanced plot {i+1}/{len(plots_data['advanced'])}: {plot_title}")
                 
                 # Check if this plot should be in landscape mode
-                plot_title = advanced_plot.get('title', '')
                 is_landscape = any(landscape_keyword in plot_title for landscape_keyword in landscape_plots)
                 
                 if is_landscape:
@@ -180,28 +349,35 @@ def export_to_pdf_from_webui_plots(plots_data, folder_data, output_filename='war
                 pdf.savefig(fig, dpi=dpi, bbox_inches='tight')
                 plt.close(fig)
         
-        # Add comparison plot (side-by-side heatmaps)
-        if 'comparison' in plots_data and plots_data['comparison']:
-            print("Adding comparison plot...")
-            fig = base64_to_figure(plots_data['comparison'], figsize=(A4_LANDSCAPE_WIDTH, A4_LANDSCAPE_HEIGHT))
+        # NOTE: Comparison and 3D plots are now added individually after each warpage image above
+        # This prevents duplication and maintains better organization
+
+        # Statistical comparison pages (from web UI) - MOVED TO END
+        print("Adding statistical analysis plots from web UI...")
+
+        # Add statistical comparison plot
+        if 'statistics' in plots_data:
+            print("  Adding statistical comparison plot...")
+            fig = base64_to_figure(plots_data['statistics'], figsize=(A4_WIDTH, A4_HEIGHT))
             pdf.savefig(fig, dpi=dpi, bbox_inches='tight')
             plt.close(fig)
-        
-        # Add 3D plots if available (though disabled by default)
-        if '3d' in plots_data:
-            print("Adding 3D surface plots...")
-            # Handle both single plot and list of plots
-            if isinstance(plots_data['3d'], list):
-                for i, plot_data in enumerate(plots_data['3d']):
-                    print(f"  Adding 3D surface plot page {i+1}/{len(plots_data['3d'])}")
-                    fig = base64_to_figure(plot_data, figsize=(A4_LANDSCAPE_WIDTH, A4_LANDSCAPE_HEIGHT))
-                    pdf.savefig(fig, dpi=dpi, bbox_inches='tight')
-                    plt.close(fig)
-            else:
-                fig = base64_to_figure(plots_data['3d'], figsize=(A4_LANDSCAPE_WIDTH, A4_LANDSCAPE_HEIGHT))
+
+        # Add individual statistical plots
+        stat_plots = ['mean', 'range', 'minmax', 'std']
+        for stat_name in stat_plots:
+            if stat_name in plots_data:
+                print(f"  Adding {stat_name} comparison plot...")
+                fig = base64_to_figure(plots_data[stat_name], figsize=(A4_WIDTH, A4_HEIGHT))
                 pdf.savefig(fig, dpi=dpi, bbox_inches='tight')
                 plt.close(fig)
-    
+
+        # Add distribution plot
+        if 'distribution' in plots_data:
+            print("  Adding distribution plot...")
+            fig = base64_to_figure(plots_data['distribution'], figsize=(A4_WIDTH, A4_HEIGHT))
+            pdf.savefig(fig, dpi=dpi, bbox_inches='tight')
+            plt.close(fig)
+
     # Final cleanup
     plt.close('all')
     gc.collect()

@@ -6,9 +6,10 @@ Data loading and processing functions for Warpage Analyzer
 
 import os
 import numpy as np
-from config import FILE_PATTERNS
+from config import FILE_PATTERNS, STREAMING_CONFIG
 from functools import lru_cache
 import hashlib
+import time
 
 # Memory optimization: Global cache for processed files
 _file_cache = {}
@@ -54,6 +55,11 @@ def load_data_from_file(file_path, downsample_factor=1):
     Returns:
         numpy.ndarray: 정리된 데이터 배열, 오류시 None / Cleaned data array, or None if error
     """
+    # 스트리밍 로딩이 활성화되어 있으면 스트리밍 함수 사용 / Use streaming function if enabled
+    if STREAMING_CONFIG.get('enable_streaming_loading', False):
+        if downsample_factor == 1:
+            downsample_factor = STREAMING_CONFIG.get('default_downsample_factor', 1)
+        return load_data_streaming(file_path, downsample_factor)
     try:
         # 파일 타입에 따른 처리 / Process based on file type
         file_ext = os.path.splitext(file_path)[1].lower()
@@ -135,6 +141,105 @@ def load_data_from_file(file_path, downsample_factor=1):
         return data_array
     except Exception as e:
         print(f"Error loading {file_path}: {e}")
+        return None
+
+
+def load_data_streaming(file_path, downsample_factor=1):
+    """
+    스트리밍 방식으로 데이터 로드 - N번째 행/열만 읽어서 메모리 사용량 최소화
+    Load data using streaming approach - reads only Nth row/column to minimize memory usage.
+
+    Args:
+        file_path (str): 데이터 파일 경로 / Path to the data file
+        downsample_factor (int): 다운샘플링 비율 (1=원본, 2=반, 4=1/4 크기) / Downsampling factor
+
+    Returns:
+        numpy.ndarray: 스트리밍으로 로드된 데이터 배열, 오류시 None / Streaming loaded data array, or None if error
+    """
+    try:
+        # 파일 타입에 따른 처리 / Process based on file type
+        file_ext = os.path.splitext(file_path)[1].lower()
+        is_akrometrix = file_ext == '.dat'
+
+        # 인코딩 설정 / Set encoding
+        if is_akrometrix:
+            encodings_to_try = ['utf-8', 'latin-1', 'cp1252']
+        else:
+            encodings_to_try = ['utf-8']
+
+        # 적절한 인코딩으로 파일 열기 / Open file with appropriate encoding
+        file_content = None
+        for encoding in encodings_to_try:
+            try:
+                with open(file_path, 'r', encoding=encoding) as f:
+                    file_content = f
+                    break
+            except UnicodeDecodeError:
+                continue
+
+        if file_content is None:
+            return None
+
+        # 스트리밍 방식으로 라인별 처리 / Stream processing line by line
+        sampled_rows = []
+        row_index = 0
+
+        with open(file_path, 'r', encoding=encoding) as f:
+            for line in f:
+                line = line.strip()
+                # 빈 줄이나 주석 줄 건너뛰기 / Skip empty lines and comments
+                if not line or line.startswith(('#', '%')):
+                    continue
+
+                # N번째 행만 유지 / Keep only every Nth row
+                if row_index % downsample_factor == 0:
+                    try:
+                        # 라인을 숫자 배열로 변환 / Convert line to number array
+                        row_data = [float(x) for x in line.split()]
+
+                        # N번째 열만 유지 / Keep only every Nth column
+                        if downsample_factor > 1:
+                            sampled_cols = [row_data[i] for i in range(0, len(row_data), downsample_factor)]
+                        else:
+                            sampled_cols = row_data
+
+                        if sampled_cols:  # 유효한 데이터가 있는 경우만 추가
+                            sampled_rows.append(sampled_cols)
+                    except ValueError:
+                        # 숫자로 변환할 수 없는 라인은 건너뛰기 / Skip lines that can't be converted to numbers
+                        continue
+
+                row_index += 1
+
+        if not sampled_rows:
+            return None
+
+        # numpy 배열로 변환 / Convert to numpy array
+        data_array = np.array(sampled_rows, dtype=float)
+
+        # 1D 배열인 경우 2D로 변환 / Convert 1D to 2D if needed
+        if data_array.ndim == 1:
+            data_array = data_array.reshape(1, -1)
+
+        # 최적화된 전처리 / Optimized preprocessing
+        # 모든 값이 0인 행/열 제거 / Remove all-zero rows/columns in one pass
+        nonzero_mask = (data_array != 0).any(axis=1)
+        if nonzero_mask.any():
+            data_array = data_array[nonzero_mask]
+            nonzero_mask = (data_array != 0).any(axis=0)
+            if nonzero_mask.any():
+                data_array = data_array[:, nonzero_mask]
+
+        # 아티팩트 값들을 NaN으로 변환 - 벡터화 연산 / Nullify artifact values - vectorized operation
+        invalid_values = np.array([-4000, 9999, -9999, 99999, -99999])
+        mask = np.isin(data_array, invalid_values)
+        if mask.any():
+            data_array = data_array.astype(float)  # Ensure float type for NaN
+            data_array[mask] = np.nan
+
+        return data_array
+    except Exception as e:
+        print(f"Error streaming load {file_path}: {e}")
         return None
 
 
@@ -234,10 +339,38 @@ def find_data_files(folder_path, use_original_files=True):
         return []
 
 
+def _process_single_file_worker(file_path, row_fraction, col_fraction, downsample_factor):
+    """
+    Worker function for multiprocessing - must be at module level.
+    처리할 단일 파일을 위한 워커 함수 - 모듈 최상위 레벨에 있어야 함.
+    """
+    try:
+        from warpage_statistics import calculate_statistics
+        
+        filename = os.path.basename(file_path)
+        
+        # Use caching and pass downsample_factor directly to load function
+        raw_data = load_data_from_file(file_path, downsample_factor)
+        if raw_data is None:
+            return None
+
+        # 중앙 영역 추출 / Extract center region
+        center_region_needed = row_fraction != 1 or col_fraction != 1
+        center_data = extract_center_region(raw_data, row_fraction, col_fraction) if center_region_needed else raw_data
+
+        # 통계 계산 / Calculate statistics
+        stats = calculate_statistics(center_data)
+
+        return (center_data, stats, filename)
+    except Exception as e:
+        print(f"Error processing {file_path}: {e}")
+        return None
+
+
 def process_folder_data_parallel(base_path, folder, row_fraction=1, col_fraction=1, use_original_files=True, downsample_factor=1, max_workers=None):
     """
-    병렬 처리로 단일 폴더의 모든 파일 데이터 처리 - 최대 속도
-    Parallel process data for all files in a single folder - maximum speed.
+    병렬 처리로 단일 폴더의 모든 파일 데이터 처리 - ProcessPoolExecutor로 최대 속도
+    Parallel process data for all files in a single folder - maximum speed with ProcessPoolExecutor.
 
     Args:
         base_path (str): 데이터 폴더들의 기본 경로 / Base path to data folders
@@ -246,14 +379,13 @@ def process_folder_data_parallel(base_path, folder, row_fraction=1, col_fraction
         col_fraction (float): 중앙에서 유지할 열의 비율 / Fraction of columns to keep in center
         use_original_files (bool): 원본 vs 보정 파일 / Original vs corrected files
         downsample_factor (int): 데이터 다운샘플링 비율 / Data downsampling factor (1=no downsampling, 2=half, 4=quarter, etc.)
-        max_workers (int): 최대 워커 수 / Maximum worker threads (None=auto)
+        max_workers (int): 최대 워커 수 / Maximum worker processes (None=auto)
 
     Returns:
         list: 각 파일에 대한 튜플 목록 (center_data, stats, data_filename)
               List of tuples (center_data, stats, data_filename) for each file
     """
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-    from warpage_statistics import calculate_statistics
+    from concurrent.futures import ProcessPoolExecutor, as_completed
     import multiprocessing
 
     folder_path = os.path.join(base_path, folder)
@@ -262,9 +394,9 @@ def process_folder_data_parallel(base_path, folder, row_fraction=1, col_fraction
     if not file_paths:
         return []
 
-    # 자동 워커 수 설정 - CPU 코어 수 기반 / Auto worker count based on CPU cores
+    # 자동 워커 수 설정 - CPU 코어 수 기반 / Auto worker count based on CPU cores  
     if max_workers is None:
-        max_workers = min(len(file_paths), multiprocessing.cpu_count() * 2)  # Aggressive threading
+        max_workers = min(len(file_paths), multiprocessing.cpu_count())  # One process per CPU core for optimal performance
 
     def process_single_file_fast(file_path):
         """Fast single file processing with caching and memory optimization"""
@@ -287,16 +419,26 @@ def process_folder_data_parallel(base_path, folder, row_fraction=1, col_fraction
             return None
 
     # 병렬 처리 실행 / Execute parallel processing
+    print(f"Starting parallel file processing with {max_workers} processes for {len(file_paths)} files...")
+    start_time = time.time()
+    
     results = []
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
         # 모든 파일을 병렬로 제출 / Submit all files in parallel
-        future_to_path = {executor.submit(process_single_file_fast, path): path for path in file_paths}
+        future_to_path = {executor.submit(_process_single_file_worker, path, row_fraction, col_fraction, downsample_factor): path for path in file_paths}
 
         # 결과 수집 / Collect results
+        completed = 0
         for future in as_completed(future_to_path):
             result = future.result()
             if result is not None:
                 results.append(result)
+            completed += 1
+            if completed % 10 == 0 or completed == len(file_paths):  # Progress logging
+                print(f"  Progress: {completed}/{len(file_paths)} files processed ({(completed/len(file_paths)*100):.1f}%)")
+    
+    elapsed = time.time() - start_time
+    print(f"Parallel file processing completed in {elapsed:.2f}s ({len(results)} files successfully loaded)")
 
     # 파일명 순서로 정렬 / Sort by filename for consistency
     results.sort(key=lambda x: x[2])
@@ -342,7 +484,7 @@ def get_file_size(file_path):
 
 def process_batch_files(file_paths, row_fraction=1.0, col_fraction=1.0):
     """
-    Process multiple files in batch with parallel processing support.
+    Process multiple files in batch with multiprocessing support for maximum speed.
     
     Args:
         file_paths (list): List of file paths to process
@@ -352,63 +494,39 @@ def process_batch_files(file_paths, row_fraction=1.0, col_fraction=1.0):
     Returns:
         dict: Processed data with file_id as key and (data, stats, filename) as value
     """
-    from warpage_statistics import calculate_statistics
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-    import threading
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+    import multiprocessing
     
     print(f"Starting batch processing of {len(file_paths)} files...")
+    start_time = time.time()
     
-    # Thread-safe progress tracking
-    progress_lock = threading.Lock()
-    processed_count = [0]  # Use list for mutable reference
+    # Calculate optimal worker count
+    max_workers = min(len(file_paths), multiprocessing.cpu_count())
+    print(f"Using {max_workers} processes for batch processing...")
     
-    def process_single_file(file_path):
-        """Process a single file and return results"""
-        try:
-            filename = os.path.basename(file_path)
-            
-            # Load raw data
-            raw_data = load_data_from_file(file_path)
-            if raw_data is None:
-                print(f"    ⚠ Skipped {filename} (load failed)")
-                return None
-            
-            # Extract center region if needed
-            if row_fraction != 1 or col_fraction != 1:
-                center_data = extract_center_region(raw_data, row_fraction, col_fraction)
-            else:
-                center_data = raw_data
-            
-            # Calculate statistics
-            stats = calculate_statistics(center_data)
-            
-            # Update progress
-            with progress_lock:
-                processed_count[0] += 1
-                print(f"    Progress: {processed_count[0]}/{len(file_paths)} - Processed {filename}")
-            
-            return (filename, center_data, stats)
-            
-        except Exception as e:
-            print(f"    ERROR processing {os.path.basename(file_path)}: {e}")
-            return None
-    
-    # Process files in parallel
+    # Process files in parallel using multiprocessing
     folder_data = {}
-    with ThreadPoolExecutor(max_workers=4) as executor:
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
         # Submit all tasks
-        future_to_path = {executor.submit(process_single_file, path): path for path in file_paths}
+        future_to_path = {executor.submit(_process_single_file_worker, path, row_fraction, col_fraction, 1): path for path in file_paths}
         
         # Collect results as they complete
+        completed = 0
         for future in as_completed(future_to_path):
             result = future.result()
             if result:
-                filename, data, stats = result
+                center_data, stats, filename = result
                 # Create unique file ID
                 file_id = f"File_{len(folder_data) + 1:02d}"
-                folder_data[file_id] = (data, stats, filename)
+                folder_data[file_id] = (center_data, stats, filename)
+            
+            completed += 1
+            if completed % 10 == 0 or completed == len(file_paths):  # Progress logging
+                print(f"    Progress: {completed}/{len(file_paths)} files processed ({(completed/len(file_paths)*100):.1f}%)")
     
-    print(f"Batch processing completed: {len(folder_data)} files successfully processed")
+    elapsed = time.time() - start_time
+    
+    print(f"Batch processing completed in {elapsed:.2f}s: {len(folder_data)} files successfully processed")
     return folder_data
 
 

@@ -101,7 +101,7 @@ DEFAULT_CONFIG = {
     
     # === Output Settings ===
     "output_filename": "warpage_analysis.pdf", # 출력 PDF 파일명 / Output PDF filename
-    "dpi": 150,                                # PDF 내보낼 용 DPI / DPI for PDF export (higher = better quality, larger file)
+    "dpi": 500,                                # PDF 내보낼 용 DPI / DPI for PDF export (higher = better quality, larger file)
     "show_plots": False,                       # 분석 후 그래프 표시 여부 / Show plots after analysis (for interactive mode)
     
     # === Report Content Settings ===
@@ -143,10 +143,10 @@ FILE_PATTERNS = {
 # === Batch Processing Configuration ===
 # Settings for processing multiple files simultaneously
 BATCH_CONFIG = {
-    'max_files': 100,              # 최대 배치 파일 수 / Maximum batch file count (prevents memory overload)
-    'max_file_size_mb': 50,        # 파일당 최대 크기 (MB) / Maximum file size per file (MB)
-    'max_total_size_mb': 500,      # 총 최대 크기 (MB) / Maximum total size (MB) for entire batch
-    'parallel_workers': 4,         # 병렬 처리 워커 수 / Number of parallel workers (CPU cores to use)
+    'max_files': 1000,              # 최대 배치 파일 수 / Maximum batch file count (prevents memory overload)
+    'max_file_size_mb': 500,        # 파일당 최대 크기 (MB) / Maximum file size per file (MB)
+    'max_total_size_mb': 500000,      # 총 최대 크기 (MB) / Maximum total size (MB) for entire batch
+    'parallel_workers': 16,         # 병렬 처리 워커 수 / Number of parallel workers (CPU cores to use)
     'supported_extensions': ['.txt', '.ptr', '.dat', '.DAT'],  # 지원되는 파일 확장자 / Supported file extensions
     'temp_dir_prefix': 'warpage_batch_'        # 임시 디렉토리 접두사 / Temporary directory prefix for batch operations
 }
@@ -187,4 +187,11 @@ SCAN_CONFIG = {
     'parallel_scanning': True,     # 병렬 스캔 활성화 / Enable parallel directory scanning for faster performance
     'max_scan_threads': 64,         # 최대 스캔 스레드 수 / Maximum number of threads for parallel scanning
     'per_directory_timeout': 5     # 디렉토리당 타임아웃 (초) / Timeout per directory in seconds
-} 
+}
+
+# === Streaming Data Loading Configuration ===
+# Settings for memory-efficient data loading using streaming line processing
+STREAMING_CONFIG = {
+    'enable_streaming_loading': True,    # 스트리밍 데이터 로딩 활성화 / Enable streaming data loading (reads Nth row/column only)
+    'default_downsample_factor': 4,      # 기본 다운샘플링 비율 / Default downsampling factor (1=no downsampling, 2=half, 4=quarter)
+}

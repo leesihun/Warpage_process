@@ -188,7 +188,8 @@ def _scan_directories_parallel(potential_dirs):
             # Thread-safe progress update
             with progress_lock:
                 processed_count[0] += 1
-                print(f"DEBUG: [{processed_count[0]}/{len(potential_dirs)}] {item_name}: {'✓ HAS DATA' if has_data else '✗ no data'}")
+                status = "HAS DATA" if has_data else "no data"
+                print(f"DEBUG: [{processed_count[0]}/{len(potential_dirs)}] {item_name}: {status}")
 
             return (item_name, has_data)
         except Exception as e:
@@ -343,31 +344,59 @@ def analyze():
         cmap = DEFAULT_CONFIG.get('cmap', 'jet')
         dpi = 100 if fast_plots else 120  # Even lower DPI for maximum speed
 
+        # Use unified landscape figsize for all plots
+        landscape_figsize = (11.69, 8.27)  # A4 landscape
+        
         if parallel_processing and fast_plots:
-            # Use parallel plot generation for maximum speed
+            # Use parallel plot generation for maximum speed with unified figsize
             individual_plots = visualization.create_plots_parallel(
-                current_data, vmin=vmin, vmax=vmax, cmap=cmap, dpi=dpi, config=DEFAULT_CONFIG
+                current_data, vmin=vmin, vmax=vmax, cmap=cmap, dpi=dpi, config=DEFAULT_CONFIG,
+                figsize=landscape_figsize
             )
         else:
-            # Fallback to sequential processing
+            # Fallback to sequential processing with unified figsize
             individual_plots = []
             for file_id, (data_array, stats, filename) in current_data.items():
                 fig = visualization.create_individual_plot(file_id, data_array, stats, filename,
-                                                         vmin=vmin, vmax=vmax, cmap=cmap, config=DEFAULT_CONFIG)
+                                                         figsize=landscape_figsize, vmin=vmin, vmax=vmax, cmap=cmap, config=DEFAULT_CONFIG)
                 plot_base64 = visualization.figure_to_base64(fig, dpi=dpi)
                 individual_plots.append(plot_base64)
 
-        # Create comparison plot
+        # Create comparison plot with unified figsize
         comparison_plot = ''
         if len(current_data) > 1:
-            comparison_figs = visualization.create_comparison_plot(current_data, vmin=vmin, vmax=vmax, cmap=cmap, config=DEFAULT_CONFIG)
+            comparison_figs = visualization.create_comparison_plot(current_data, figsize=landscape_figsize, vmin=vmin, vmax=vmax, cmap=cmap, config=DEFAULT_CONFIG)
             if comparison_figs:
                 comparison_plot = visualization.figure_to_base64(comparison_figs[0], dpi=dpi)
 
-        # Create 3D plots if data is available
+        # Create 3D plots if data is available with unified figsize
         three_d_plots = []
         if current_data:
-            three_d_plots = visualization.create_3d_surface_plot_web(current_data, config=DEFAULT_CONFIG)
+            three_d_plots = visualization.create_3d_surface_plot_web(current_data, figsize=landscape_figsize, config=DEFAULT_CONFIG)
+
+        # Create statistical plots if multiple files are available
+        statistical_plots = {}
+        if current_data and len(current_data) > 1:
+            try:
+                # Generate all statistical comparison plots
+                stat_plot_functions = {
+                    'mean': visualization.create_mean_comparison_plot,
+                    'range': visualization.create_range_comparison_plot,
+                    'minmax': visualization.create_minmax_comparison_plot,
+                    'std': visualization.create_std_comparison_plot,
+                    'distribution': visualization.create_warpage_distribution_plot
+                }
+
+                for plot_name, plot_function in stat_plot_functions.items():
+                    try:
+                        fig = plot_function(current_data)
+                        statistical_plots[plot_name] = visualization.figure_to_base64(fig, dpi=dpi)
+                        print(f"Generated {plot_name} statistical plot")
+                    except Exception as e:
+                        print(f"Failed to generate {plot_name} plot: {e}")
+
+            except Exception as e:
+                print(f"Statistical plots generation failed: {e}")
 
         # Create advanced statistics if data is available
         advanced_plots = []
@@ -393,6 +422,7 @@ def analyze():
             'individual': individual_plots,
             'comparison': comparison_plot,
             '3d': three_d_plots,
+            'statistical': statistical_plots,
             'advanced': advanced_plots
         }
 
@@ -541,6 +571,16 @@ def export_pdf_report():
             '3d': current_plots.get('3d', []),
             'advanced': current_plots.get('advanced', [])
         }
+
+        # Add statistical plots for PDF export
+        statistical_plots = current_plots.get('statistical', {})
+        all_plots.update({
+            'mean': statistical_plots.get('mean', ''),
+            'range': statistical_plots.get('range', ''),
+            'minmax': statistical_plots.get('minmax', ''),
+            'std': statistical_plots.get('std', ''),
+            'distribution': statistical_plots.get('distribution', '')
+        })
 
         # Add individual plots with file_id information
         if current_plots and 'individual' in current_plots:
@@ -746,12 +786,19 @@ def get_all_plots():
             'individual': [],
             'comparison': current_plots.get('comparison', ''),
             'statistics': current_plots.get('comparison', ''),
-            'mean': '',
-            'range': '',
-            'minmax': '',
-            'std': '',
-            'distribution': ''
+            '3d': current_plots.get('3d', []),
+            'advanced': current_plots.get('advanced', [])
         }
+
+        # Add statistical plots if they were generated during analysis
+        statistical_plots = current_plots.get('statistical', {})
+        all_plots.update({
+            'mean': statistical_plots.get('mean', ''),
+            'range': statistical_plots.get('range', ''),
+            'minmax': statistical_plots.get('minmax', ''),
+            'std': statistical_plots.get('std', ''),
+            'distribution': statistical_plots.get('distribution', '')
+        })
 
         # Add individual plots with metadata
         file_keys = list(current_data.keys())
@@ -766,46 +813,8 @@ def get_all_plots():
                     'stats': stats
                 })
 
-        # Generate statistical plots in parallel for maximum speed
-        try:
-            if current_data and len(current_data) > 1:
-                from concurrent.futures import ThreadPoolExecutor, as_completed
-                import multiprocessing
-
-                # Ultra-low DPI for maximum speed
-                dpi = 80
-                max_workers = min(5, multiprocessing.cpu_count())
-
-                def create_stat_plot(plot_type):
-                    """Create statistical plots in parallel"""
-                    try:
-                        if plot_type == 'mean':
-                            fig = visualization.create_mean_comparison_plot(current_data)
-                        elif plot_type == 'range':
-                            fig = visualization.create_range_comparison_plot(current_data)
-                        elif plot_type == 'minmax':
-                            fig = visualization.create_minmax_comparison_plot(current_data)
-                        elif plot_type == 'std':
-                            fig = visualization.create_std_comparison_plot(current_data)
-                        elif plot_type == 'distribution':
-                            fig = visualization.create_warpage_distribution_plot(current_data)
-                        else:
-                            return None, None
-                        return plot_type, visualization.figure_to_base64(fig, dpi=dpi)
-                    except Exception:
-                        return None, None
-
-                # Generate all statistical plots in parallel
-                plot_types = ['mean', 'range', 'minmax', 'std', 'distribution']
-                with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                    futures = {executor.submit(create_stat_plot, plot_type): plot_type for plot_type in plot_types}
-                    for future in as_completed(futures):
-                        plot_type, plot_base64 = future.result()
-                        if plot_type and plot_base64:
-                            all_plots[plot_type] = plot_base64
-
-        except Exception:
-            pass  # Skip failed plots
+        # Statistical plots are now generated during analysis and cached
+        # No need to regenerate them here
 
         return jsonify({
             'success': True,
@@ -832,7 +841,7 @@ def open_browser():
     time.sleep(2)  # Wait for server to start
     try:
         webbrowser.open(f'http://localhost:{WEB_PORT}')
-        print(f"✓ Browser opened to http://localhost:{WEB_PORT}")
+        print(f"Browser opened to http://localhost:{WEB_PORT}")
     except Exception as e:
         print(f"Could not open browser: {e}")
         print(f"Please manually open: http://localhost:{WEB_PORT}")
@@ -854,6 +863,6 @@ if __name__ == '__main__':
     try:
         app.run(host='127.0.0.1', port=WEB_PORT, debug=False, use_reloader=False, threaded=True)
     except KeyboardInterrupt:
-        print("\n✓ Server stopped")
+        print("\nServer stopped")
     except Exception as e:
         print(f"Server error: {e}")

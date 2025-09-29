@@ -179,7 +179,7 @@ def figure_to_base64(fig, dpi=150, format='png', close_fig=True):
 
     return base64.b64encode(image_data).decode('utf-8')
 
-def create_plots_parallel(folder_data, vmin=None, vmax=None, cmap='jet', dpi=120, max_workers=None, config=None):
+def create_plots_parallel(folder_data, vmin=None, vmax=None, cmap='jet', dpi=120, max_workers=None, config=None, figsize=(8.27, 11.69)):
     """
     Create all individual plots in parallel for maximum speed.
 
@@ -190,6 +190,7 @@ def create_plots_parallel(folder_data, vmin=None, vmax=None, cmap='jet', dpi=120
         dpi (int): DPI for plots (reduced for speed)
         max_workers (int): Maximum worker threads
         config (dict): Configuration dictionary
+        figsize (tuple): Figure size for all plots
 
     Returns:
         list: List of base64-encoded plot images
@@ -207,7 +208,7 @@ def create_plots_parallel(folder_data, vmin=None, vmax=None, cmap='jet', dpi=120
         try:
             # Create figure with optimized settings
             fig = create_individual_plot(file_id, data, stats, filename,
-                                       vmin=vmin, vmax=vmax, cmap=cmap, colorbar=True, config=config)
+                                       figsize=figsize, vmin=vmin, vmax=vmax, cmap=cmap, colorbar=True, config=config)
             # Convert to base64 with specified DPI
             plot_base64 = figure_to_base64(fig, dpi=dpi, close_fig=True)
             return plot_base64
@@ -237,23 +238,38 @@ def create_plots_parallel(folder_data, vmin=None, vmax=None, cmap='jet', dpi=120
 def get_readable_x_axis_ticks(x_pos, labels, max_labels=10):
     """
     Get readable x-axis tick positions and labels by selecting a subset when there are too many.
-    
+    Special handling: if total files > 200, show ticks every 100 files.
+
     Args:
         x_pos (array): X-axis positions (e.g., np.arange(len(data)))
         labels (list): All labels corresponding to x_pos
-        max_labels (int): Maximum number of labels to show
-        
+        max_labels (int): Maximum number of labels to show (ignored if >200 files)
+
     Returns:
         tuple: (selected_x_positions, selected_labels)
     """
-    if len(labels) <= max_labels:
+    total_files = len(labels)
+
+    # Special case: if more than 200 files, show ticks every 100 files
+    if total_files > 200:
+        # Show ticks at positions 0, 100, 200, 300, etc.
+        selected_indices = list(range(0, total_files, 100))
+        # Always include the last file if it's not already included
+        if (total_files - 1) not in selected_indices:
+            selected_indices.append(total_files - 1)
+
+        selected_x_pos = x_pos[selected_indices]
+        selected_labels = [labels[i] for i in selected_indices]
+        return selected_x_pos, selected_labels
+
+    elif total_files <= max_labels:
         # If we have few enough labels, show them all
         return x_pos, labels
     else:
         # Calculate step size to show approximately max_labels
-        step = max(1, len(labels) // max_labels)
+        step = max(1, total_files // max_labels)
         # Select every nth position and label
-        selected_indices = range(0, len(labels), step)
+        selected_indices = range(0, total_files, step)
         selected_x_pos = x_pos[selected_indices]
         selected_labels = [labels[i] for i in selected_indices]
         return selected_x_pos, selected_labels

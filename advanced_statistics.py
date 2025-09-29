@@ -120,10 +120,13 @@ def create_violin_plots(folder_data, figsize=(11.69, 8.27)):
     return fig
 
 
-def create_cdf_plots(folder_data, figsize=(11.69, 8.27)):
+def create_cdf_plots(folder_data, figsize=(11.69, 8.27), show_legend=True):
     """
     누적분포함수 플롯 - (최대-최소) 워페이지 범위 기준
     Cumulative Distribution Function plots - Based on (max-min) warpage ranges
+
+    Args:
+        show_legend (bool): Whether to show legend (hidden for >100 files)
     """
     fig, ax = plt.subplots(figsize=figsize)
     
@@ -162,10 +165,11 @@ def create_cdf_plots(folder_data, figsize=(11.69, 8.27)):
     
     ax.set_xlabel('(Max - Min) Warpage Value', fontsize=12)
     ax.set_ylabel('Cumulative Probability', fontsize=12)
-    ax.set_title('Cumulative Distribution of Warpage Ranges\n(X-axis: Max-Min values across files)', 
+    ax.set_title('Cumulative Distribution of Warpage Ranges\n(X-axis: Max-Min values across files)',
                 fontsize=14, fontweight='bold')
     ax.grid(True, alpha=0.3)
-    ax.legend()
+    if show_legend:
+        ax.legend()
     
     plt.tight_layout()
     return fig
@@ -286,7 +290,7 @@ def create_contour_plots(folder_data, figsize=(11.69, 8.27)):
     return figures
 
 
-def create_cross_sectional_profiles(folder_data, figsize=(11.69, 8.27)):
+def create_cross_sectional_profiles(folder_data, figsize=(11.69, 8.27), show_legend=True):
     """
     단면 프로파일 플롯 / Cross-sectional profile plots
     """
@@ -311,19 +315,21 @@ def create_cross_sectional_profiles(folder_data, figsize=(11.69, 8.27)):
     ax1.set_ylabel('Warpage Value', fontsize=12)
     ax1.set_title('Center Row Profile', fontweight='bold')
     ax1.grid(True, alpha=0.3)
-    ax1.legend()
-    
+    if show_legend:
+        ax1.legend()
+
     ax2.set_xlabel('Y Position', fontsize=12)
     ax2.set_ylabel('Warpage Value', fontsize=12)
     ax2.set_title('Center Column Profile', fontweight='bold')
     ax2.grid(True, alpha=0.3)
-    ax2.legend()
+    if show_legend:
+        ax2.legend()
     
     plt.tight_layout()
     return fig
 
 
-def create_percentile_analysis(folder_data, figsize=(11.69, 8.27)):
+def create_percentile_analysis(folder_data, figsize=(11.69, 8.27), show_legend=True):
     """
     백분위수 분석 시각화 / Percentile analysis visualization
     """
@@ -362,7 +368,8 @@ def create_percentile_analysis(folder_data, figsize=(11.69, 8.27)):
     ax.set_xticks(x_pos)
     ax.set_xticklabels(file_ids)
     ax.grid(True, alpha=0.3)
-    ax.legend()
+    if show_legend:
+        ax.legend()
     
     plt.tight_layout()
     return fig
@@ -633,7 +640,7 @@ def perform_clustering_analysis(folder_data, n_clusters=3):
     return features_scaled, cluster_labels, file_ids, kmeans
 
 
-def create_clustering_visualization(folder_data, figsize=(8.27, 11.69)):
+def create_clustering_visualization(folder_data, figsize=(8.27, 11.69), show_legend=True):
     """
     클러스터링 시각화 / Clustering visualization
     """
@@ -662,7 +669,8 @@ def create_clustering_visualization(folder_data, figsize=(8.27, 11.69)):
     ax1.set_ylabel(f'PC2 ({pca.explained_variance_ratio_[1]:.1%} variance)')
     ax1.set_title('File Clustering (PCA projection)')
     ax1.grid(True, alpha=0.3)
-    ax1.legend()
+    if show_legend:
+        ax1.legend()
     
     # 클러스터 중심과의 거리 / Distance to cluster centers
     cluster_centers_2d = pca.transform(kmeans.cluster_centers_)
@@ -1043,22 +1051,40 @@ Samsung Electronics Co., Ltd.
     return fig
 
 
+def _should_show_legend(folder_data, max_files=100):
+    """
+    Determine if legend should be shown based on number of files.
+
+    Args:
+        folder_data (dict): Dictionary with file data
+        max_files (int): Maximum number of files before hiding legend
+
+    Returns:
+        bool: True if legend should be shown, False otherwise
+    """
+    return len(folder_data) <= max_files
+
 def create_comprehensive_advanced_analysis(folder_data, figsize=(8.27, 11.69), vmin=None, vmax=None):
     """
     모든 고급 통계 분석 생성 / Create comprehensive advanced statistical analysis
-    
+
     Args:
         folder_data (dict): Dictionary with file_id as key and (data, stats, filename) as value
         figsize (tuple): Figure size for each plot
         vmin (float, optional): Minimum value for color scale
         vmax (float, optional): Maximum value for color scale
-        
+
     Returns:
         list: List of matplotlib figures for advanced analysis
     """
     if not folder_data:
         print("No data found for advanced analysis!")
         return []
+
+    # Check if legends should be shown (hide if >100 files)
+    show_legend = _should_show_legend(folder_data, max_files=100)
+    if not show_legend:
+        print(f"Note: Hiding legends for advanced plots due to large number of files ({len(folder_data)} > 100)")
     
     # 사용할 분석 함수들 (사용자가 요청하지 않은 것들 제외)
     # Analysis functions to use (excluding user-specified exclusions)
@@ -1101,20 +1127,34 @@ def create_comprehensive_advanced_analysis(folder_data, figsize=(8.27, 11.69), v
             print(f"  Creating {analysis_name} ({i+1}/{len(analyses_to_create)})...")
             # Functions that need vmin/vmax for original data visualization
             functions_needing_vmin_vmax = ['gradient_analysis', 'hotspot_analysis', 'heatmap_overlays', 'fourier_analysis']
-            
+            # Functions that support show_legend parameter
+            functions_with_legend = ['cdf_plots', 'cross_sectional_profiles', 'percentile_analysis', 'clustering_visualization']
+
             # Let landscape functions use their own defaults, others use provided figsize
             if analysis_name in landscape_functions:
                 # Use function's default figsize (which is landscape)
                 if analysis_name in functions_needing_vmin_vmax:
-                    result = analysis_func(folder_data, vmin=vmin, vmax=vmax)
+                    if analysis_name in functions_with_legend:
+                        result = analysis_func(folder_data, vmin=vmin, vmax=vmax, show_legend=show_legend)
+                    else:
+                        result = analysis_func(folder_data, vmin=vmin, vmax=vmax)
                 else:
-                    result = analysis_func(folder_data)
+                    if analysis_name in functions_with_legend:
+                        result = analysis_func(folder_data, show_legend=show_legend)
+                    else:
+                        result = analysis_func(folder_data)
             else:
                 # Use provided figsize for portrait functions
                 if analysis_name in functions_needing_vmin_vmax:
-                    result = analysis_func(folder_data, figsize=figsize, vmin=vmin, vmax=vmax)
+                    if analysis_name in functions_with_legend:
+                        result = analysis_func(folder_data, figsize=figsize, vmin=vmin, vmax=vmax, show_legend=show_legend)
+                    else:
+                        result = analysis_func(folder_data, figsize=figsize, vmin=vmin, vmax=vmax)
                 else:
-                    result = analysis_func(folder_data, figsize=figsize)
+                    if analysis_name in functions_with_legend:
+                        result = analysis_func(folder_data, figsize=figsize, show_legend=show_legend)
+                    else:
+                        result = analysis_func(folder_data, figsize=figsize)
             
             if result is not None:
                 title = analysis_titles.get(analysis_name, f"Advanced Analysis - {analysis_name}")
