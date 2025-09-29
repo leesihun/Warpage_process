@@ -12,6 +12,7 @@ import base64
 import io
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import multiprocessing
+from scipy import ndimage
 
 # Lazy import for optional dependencies
 _plotly_available = None
@@ -48,6 +49,111 @@ def _get_advanced_functions():
     return _ADVANCED_PLOT_FUNCTIONS
 
 
+def resize_data_for_visualization(data, max_size=512, preserve_aspect=True, config=None):
+    """
+    Resize data array for faster visualization and PDF generation.
+
+    Performance optimization: Large arrays (>512x512) are resized to reduce
+    rendering time while preserving visual information and aspect ratio.
+
+    Args:
+        data (numpy.ndarray): Input data array
+        max_size (int): Maximum dimension size for resizing
+        preserve_aspect (bool): Whether to preserve aspect ratio
+        config (dict): Configuration dictionary (if provided, checks disable_data_resizing)
+
+    Returns:
+        numpy.ndarray: Resized data array (or original if disabled/already small)
+    """
+    if data is None or data.size == 0:
+        return data
+
+    # Check if data resizing is disabled via configuration
+    if config and config.get('disable_data_resizing', False):
+        print(f"DEBUG: Data resizing disabled by configuration, using original data shape {data.shape}")
+        return data
+
+    rows, cols = data.shape
+
+    # If data is already small enough, return as-is
+    if rows <= max_size and cols <= max_size:
+        return data
+
+    # Calculate new dimensions
+    if preserve_aspect:
+        # Preserve aspect ratio
+        aspect_ratio = cols / rows
+        if rows > cols:
+            new_rows = max_size
+            new_cols = int(max_size * aspect_ratio)
+        else:
+            new_cols = max_size
+            new_rows = int(max_size / aspect_ratio)
+    else:
+        new_rows = min(rows, max_size)
+        new_cols = min(cols, max_size)
+
+    # Use scipy's zoom for high-quality resizing that preserves data characteristics
+    zoom_factors = (new_rows / rows, new_cols / cols)
+
+    try:
+        # Handle NaN values properly during resizing
+        if np.any(np.isnan(data)):
+            # Create mask for valid data
+            mask = ~np.isnan(data)
+
+            # Interpolate NaN values temporarily for resizing
+            from scipy.interpolate import griddata
+            valid_points = np.column_stack(np.where(mask))
+            valid_values = data[mask]
+
+            if len(valid_values) > 0:
+                # Create coordinate grids
+                y_coords, x_coords = np.mgrid[0:rows, 0:cols]
+                all_points = np.column_stack([y_coords.ravel(), x_coords.ravel()])
+
+                # Interpolate to fill NaN values
+                interpolated = griddata(valid_points, valid_values, all_points,
+                                      method='nearest', fill_value=np.nanmean(data))
+                data_filled = interpolated.reshape(data.shape)
+            else:
+                data_filled = np.zeros_like(data)
+        else:
+            data_filled = data
+
+        # Resize using scipy zoom (high quality)
+        resized_data = ndimage.zoom(data_filled, zoom_factors, order=1, prefilter=False)
+
+        print(f"DEBUG: Resized data from {data.shape} to {resized_data.shape} for faster visualization")
+        return resized_data
+
+    except Exception as e:
+        print(f"WARNING: Data resizing failed: {e}, using original data")
+        return data
+
+
+def get_optimal_visualization_size(data_shape, target_pixels=262144):
+    """
+    Calculate optimal visualization size based on data dimensions.
+
+    Args:
+        data_shape (tuple): Shape of the original data (rows, cols)
+        target_pixels (int): Target number of pixels (default: 512x512 = 262144)
+
+    Returns:
+        int: Optimal maximum dimension size
+    """
+    rows, cols = data_shape
+    total_pixels = rows * cols
+
+    if total_pixels <= target_pixels:
+        return max(rows, cols)  # No resizing needed
+
+    # Calculate scaling factor to achieve target pixel count
+    scale_factor = np.sqrt(target_pixels / total_pixels)
+    return int(max(rows, cols) * scale_factor)
+
+
 def figure_to_base64(fig, dpi=150, format='png', close_fig=True):
     """
     Convert a matplotlib figure to a base64-encoded string - optimized.
@@ -73,7 +179,7 @@ def figure_to_base64(fig, dpi=150, format='png', close_fig=True):
 
     return base64.b64encode(image_data).decode('utf-8')
 
-def create_plots_parallel(folder_data, vmin=None, vmax=None, cmap='jet', dpi=120, max_workers=None):
+def create_plots_parallel(folder_data, vmin=None, vmax=None, cmap='jet', dpi=120, max_workers=None, config=None):
     """
     Create all individual plots in parallel for maximum speed.
 
@@ -83,6 +189,7 @@ def create_plots_parallel(folder_data, vmin=None, vmax=None, cmap='jet', dpi=120
         cmap (str): Colormap name
         dpi (int): DPI for plots (reduced for speed)
         max_workers (int): Maximum worker threads
+        config (dict): Configuration dictionary
 
     Returns:
         list: List of base64-encoded plot images
@@ -100,7 +207,7 @@ def create_plots_parallel(folder_data, vmin=None, vmax=None, cmap='jet', dpi=120
         try:
             # Create figure with optimized settings
             fig = create_individual_plot(file_id, data, stats, filename,
-                                       vmin=vmin, vmax=vmax, cmap=cmap, colorbar=True)
+                                       vmin=vmin, vmax=vmax, cmap=cmap, colorbar=True, config=config)
             # Convert to base64 with specified DPI
             plot_base64 = figure_to_base64(fig, dpi=dpi, close_fig=True)
             return plot_base64
@@ -152,7 +259,7 @@ def get_readable_x_axis_ticks(x_pos, labels, max_labels=10):
         return selected_x_pos, selected_labels
 
 
-def create_comparison_plot(folder_data, figsize=(11.69, 8.27), vmin=None, vmax=None, cmap='jet', colorbar=True):
+def create_comparison_plot(folder_data, figsize=(11.69, 8.27), vmin=None, vmax=None, cmap='jet', colorbar=True, optimize_for_pdf=False, config=None):
     """
     Create a comparison plot showing all files in 4x4 grid configuration - speed optimized.
 
@@ -162,6 +269,8 @@ def create_comparison_plot(folder_data, figsize=(11.69, 8.27), vmin=None, vmax=N
         vmin, vmax (float): Color scale limits
         cmap (str): Colormap name
         colorbar (bool): Whether to show colorbar
+        optimize_for_pdf (bool): Whether to resize data for faster PDF generation
+        config (dict): Configuration dictionary
 
     Returns:
         list: List of matplotlib figures (one or more pages)
@@ -202,9 +311,15 @@ def create_comparison_plot(folder_data, figsize=(11.69, 8.27), vmin=None, vmax=N
         images = []
         for i, (file_id, (data, stats, filename)) in enumerate(page_files):
             if data is not None and i < 16:
+                # Optimize data for PDF if requested
+                if optimize_for_pdf:
+                    data_for_plot = resize_data_for_visualization(data, max_size=256, preserve_aspect=True, config=config)  # Smaller for comparison grid
+                else:
+                    data_for_plot = data
                 ax = axes_flat[i]
-                # Fast image rendering
-                im = ax.imshow(data, cmap=cmap, vmin=vmin, vmax=vmax, aspect='auto', interpolation='nearest')
+                # Fast image rendering with optimized data
+                interpolation = 'bilinear' if optimize_for_pdf else 'nearest'
+                im = ax.imshow(data_for_plot, cmap=cmap, vmin=vmin, vmax=vmax, aspect='auto', interpolation=interpolation)
                 images.append(im)
 
                 # Minimal text formatting
@@ -266,7 +381,7 @@ def create_comprehensive_advanced_analysis(folder_data, figsize=(8.27, 11.69)):
     return figures
 
 
-def create_individual_plot(file_id, data, stats, filename, figsize=(8.27, 11.69), vmin=None, vmax=None, cmap='jet', colorbar=True):
+def create_individual_plot(file_id, data, stats, filename, figsize=(8.27, 11.69), vmin=None, vmax=None, cmap='jet', colorbar=True, optimize_for_pdf=False, config=None):
     """
     Create an individual plot for a single file with TRUE SCALE aspect ratio - optimized for speed.
 
@@ -279,6 +394,8 @@ def create_individual_plot(file_id, data, stats, filename, figsize=(8.27, 11.69)
         vmin, vmax (float): Color scale limits
         cmap (str): Colormap name
         colorbar (bool): Whether to show colorbar
+        optimize_for_pdf (bool): Whether to resize data for faster PDF generation
+        config (dict): Configuration dictionary
 
     Returns:
         matplotlib.figure.Figure: The created figure
@@ -286,14 +403,22 @@ def create_individual_plot(file_id, data, stats, filename, figsize=(8.27, 11.69)
     # Use faster subplot creation
     fig, ax = plt.subplots(figsize=figsize, constrained_layout=True)
 
-    # Optimized data handling
-    if np.isnan(data).any():
-        data_for_plot = np.ma.masked_invalid(data)
+    # Optimize data for PDF generation if requested
+    if optimize_for_pdf:
+        # Resize large data arrays for much faster PDF rendering
+        optimal_size = get_optimal_visualization_size(data.shape, target_pixels=262144)  # 512x512 equivalent
+        data_for_plot = resize_data_for_visualization(data, max_size=optimal_size, preserve_aspect=True, config=config)
     else:
         data_for_plot = data
 
+    # Optimized data handling
+    if np.isnan(data_for_plot).any():
+        data_for_plot = np.ma.masked_invalid(data_for_plot)
+
     # TRUE SCALE display - use 'equal' aspect ratio for correct PCB representation
-    im = ax.imshow(data_for_plot, cmap=cmap, vmin=vmin, vmax=vmax, aspect='equal', interpolation='nearest')
+    # Use 'bilinear' interpolation for resized data, 'nearest' for original data
+    interpolation = 'bilinear' if optimize_for_pdf else 'nearest'
+    im = ax.imshow(data_for_plot, cmap=cmap, vmin=vmin, vmax=vmax, aspect='equal', interpolation=interpolation)
 
     # Simplified styling
     simple_file_id = file_id.replace('File_', '')
@@ -323,63 +448,106 @@ def create_individual_plot(file_id, data, stats, filename, figsize=(8.27, 11.69)
     return fig
 
 
-def create_3d_surface_plot(folder_data, figsize=(11.69, 8.27)):
+def create_3d_surface_plot(folder_data, figsize=(11.69, 8.27), optimize_for_pdf=False, max_plots_per_page=6, config=None):
     """
     Create highly optimized 3D surface plots for maximum speed.
 
     Args:
         folder_data (dict): Dictionary with file_id as key and (data, stats, filename) as value
         figsize (tuple): Figure size
+        optimize_for_pdf (bool): Whether to resize data for faster PDF generation
+        max_plots_per_page (int): Maximum number of plots per page
+        config (dict): Configuration dictionary
 
     Returns:
-        matplotlib.figure.Figure: The created figure
+        list of matplotlib.figure.Figure: List of figures (for multiple pages)
     """
     if not folder_data:
-        return None
+        return []
 
     # Import 3D plotting only when needed
     from mpl_toolkits.mplot3d import Axes3D
 
-    fig = plt.figure(figsize=figsize, constrained_layout=True)
-    fig.suptitle('3D Surface Plots - Warpage Data', fontsize=15, fontweight='bold')
+    all_files = list(folder_data.items())
+    figures = []
 
-    # Limit to 6 plots for maximum performance
-    files_to_plot = list(folder_data.items())[:6]
-    n_files = len(files_to_plot)
-    n_cols = min(3, n_files)  # 3 columns max for speed
-    n_rows = (n_files + n_cols - 1) // n_cols
+    # Create multiple pages if there are more plots than max_plots_per_page
+    for page_start in range(0, len(all_files), max_plots_per_page):
+        files_to_plot = all_files[page_start:page_start + max_plots_per_page]
 
-    for i, (file_id, (data, stats, filename)) in enumerate(files_to_plot):
-        if data is not None:
-            ax = fig.add_subplot(n_rows, n_cols, i + 1, projection='3d')
+        fig = plt.figure(figsize=figsize, constrained_layout=True)
+        page_num = (page_start // max_plots_per_page) + 1
+        total_pages = (len(all_files) + max_plots_per_page - 1) // max_plots_per_page
+        fig.suptitle(f'3D Surface Plots - Warpage Data (Page {page_num}/{total_pages})', fontsize=15, fontweight='bold')
 
-            # Aggressive downsampling for 3D performance
-            if data.shape[0] > 50 or data.shape[1] > 50:
-                step_row = max(1, data.shape[0] // 30)  # More aggressive
-                step_col = max(1, data.shape[1] // 30)
-                data_sampled = data[::step_row, ::step_col]
-            else:
-                data_sampled = data
+        n_files = len(files_to_plot)
+        n_cols = min(3, n_files)  # 3 columns max for speed
+        n_rows = (n_files + n_cols - 1) // n_cols
 
-            rows, cols = data_sampled.shape
-            x = np.arange(cols)
-            y = np.arange(rows)
-            X, Y = np.meshgrid(x, y)
+        for i, (file_id, (data, stats, filename)) in enumerate(files_to_plot):
+            if data is not None:
+                ax = fig.add_subplot(n_rows, n_cols, i + 1, projection='3d')
 
-            # Highly optimized surface plot
-            surf = ax.plot_surface(X, Y, data_sampled, cmap='viridis', alpha=0.7,
-                                 rcount=min(30, rows), ccount=min(30, cols),  # Lower resolution
-                                 linewidth=0, antialiased=False)  # Disable anti-aliasing for speed
+                # Optimize data for 3D performance
+                if optimize_for_pdf:
+                    # Use the same resizing function for consistency
+                    data_sampled = resize_data_for_visualization(data, max_size=128, preserve_aspect=True, config=config)  # Very small for 3D
+                else:
+                    # Original aggressive downsampling for 3D performance
+                    if data.shape[0] > 50 or data.shape[1] > 50:
+                        step_row = max(1, data.shape[0] // 30)  # More aggressive
+                        step_col = max(1, data.shape[1] // 30)
+                        data_sampled = data[::step_row, ::step_col]
+                    else:
+                        data_sampled = data
 
-            # Minimal labeling for speed
-            simple_file_id = file_id.replace('File_', '')
-            ax.set_title(f'{simple_file_id}', fontweight='bold', fontsize=9)
-            # Remove axis labels for speed
-            ax.set_xticks([])
-            ax.set_yticks([])
-            ax.set_zticks([])
+                rows, cols = data_sampled.shape
+                x = np.arange(cols)
+                y = np.arange(rows)
+                X, Y = np.meshgrid(x, y)
 
-    return fig
+                # Highly optimized surface plot
+                surf = ax.plot_surface(X, Y, data_sampled, cmap='viridis', alpha=0.7,
+                                     rcount=min(30, rows), ccount=min(30, cols),  # Lower resolution
+                                     linewidth=0, antialiased=False)  # Disable anti-aliasing for speed
+
+                # Minimal labeling for speed
+                simple_file_id = file_id.replace('File_', '')
+                ax.set_title(f'{simple_file_id}', fontweight='bold', fontsize=9)
+                # Remove axis labels for speed
+                ax.set_xticks([])
+                ax.set_yticks([])
+                ax.set_zticks([])
+
+        figures.append(fig)
+
+    return figures
+
+
+def create_3d_surface_plot_web(folder_data, figsize=(11.69, 8.27), max_plots_per_page=6, config=None):
+    """
+    Create 3D surface plots for web interface, returning base64 encoded images.
+
+    Args:
+        folder_data (dict): Dictionary with file_id as key and (data, stats, filename) as value
+        figsize (tuple): Figure size
+        max_plots_per_page (int): Maximum number of plots per page
+        config (dict): Configuration dictionary
+
+    Returns:
+        list of str: List of base64 encoded images (one for each page)
+    """
+    figures = create_3d_surface_plot(folder_data, figsize, optimize_for_pdf=False, max_plots_per_page=max_plots_per_page, config=config)
+
+    if not figures:
+        return []
+
+    base64_plots = []
+    for fig in figures:
+        base64_string = figure_to_base64(fig, dpi=150, close_fig=True)
+        base64_plots.append(base64_string)
+
+    return base64_plots
 
 
 def create_statistical_comparison_plots(folder_data, figsize=(8.27, 11.69)):

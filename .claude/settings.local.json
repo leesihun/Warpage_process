@@ -50,7 +50,16 @@
       "Bash(\"./DataAutoTransfer_v2.exe\" --help)",
       "Bash(move:*)",
       "Bash(mv:*)",
-      "Bash(\"./dist/PEMTRON_Warpage_Tool.exe\" --test)"
+      "Bash(\"./dist/PEMTRON_Warpage_Tool.exe\" --test)",
+      "Bash(build_pyinstaller.bat)",
+      "Bash(timeout:*)",
+      "Bash(.venv312Scriptspython.exe -m pip install scikit-learn seaborn)",
+      "Bash(\".venv312\\Scripts\\python.exe\" -m pip install scikit-learn seaborn)",
+      "Bash(.venv312\\Scripts\\python.exe -m pip install:*)",
+      "Bash(\".venv312\\Scripts\\python.exe\" -m pip list)",
+      "Bash(\".venv312\\Scripts\\python.exe\" -m PyInstaller --onefile --name \"Auto_PDF\" Auto_PDF.py)",
+      "Bash(\".venv312\\Scripts\\python.exe\" -m PyInstaller --onefile --name \"Auto_PDF\" Auto_PDF.py --clean)",
+      "Bash(\"./dist/Auto_PDF.exe\" --help)"
     ],
     "deny": [],
     "ask": []

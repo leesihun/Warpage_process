@@ -108,6 +108,8 @@ DEFAULT_CONFIG = {
     "include_stats": True,                     # 통계 분석 그래프 포함 여부 / Include statistical analysis plots in report
     "include_3d": True,                        # 3D 표면 그래프 포함 여부 / Include 3D surface plots in report
     "include_advanced": False,                 # 고급 통계 분석 포함 여부 (성능상 기본 비활성화) / Include advanced statistical analysis (disabled by default for performance)
+    "optimize_pdf_data": True,                 # PDF 생성시 데이터 리사이징 최적화 / Optimize data resizing for faster PDF generation
+    "disable_data_resizing": False,           # 데이터 리사이징 완전 비활성화 / Completely disable data resizing for all visualizations
     
     # === File Processing Settings ===
     "use_original_files": True                 # 원본 파일(@_ORI.txt) vs 보정된 파일(.txt) 사용 / Use original files (@_ORI.txt) vs corrected files (.txt)
@@ -120,7 +122,7 @@ REPORT_DIR = get_resource_path('report')     # 보고서 디렉토리 / Report d
 
 # === Web GUI Configuration ===
 # Settings for the Flask web server interface
-WEB_PORT = 9410072       # 웹 서버 포트 / Web server port (unique port for PEMTRON_warpage as per user rules)
+WEB_PORT = 5001       # 웹 서버 포트 / Web server port (unique port for PEMTRON_warpage as per user rules)
 WEB_HOST = '0.0.0.0'     # 웹 서버 호스트 / Web server host (0.0.0.0 = listen on all interfaces)
 WEB_DEBUG = False        # 웹 디버그 모드 / Web debug mode (disabled for production builds)
 
@@ -170,4 +172,19 @@ REALTIME_CONFIG = {
     'debounce_enabled': True,      # 디바운싱 활성화 / Enable debouncing (wait for user to stop interacting before updating)
     'max_update_frequency': 5,     # 초당 최대 업데이트 횟수 / Maximum updates per second (rate limiting)
     'enable_live_preview': True    # 라이브 프리뷰 활성화 / Enable live preview of changes as user adjusts parameters
+}
+
+# === Directory Scanning Configuration ===
+# Settings for optimizing directory scanning performance
+SCAN_CONFIG = {
+    'max_scan_depth': 2,           # 최대 스캔 깊이 / Maximum directory scan depth (reduces deep recursion)
+    'cache_ttl_seconds': 300,       # 캐시 유지 시간 (초) / Cache time-to-live in seconds (prevents repeated scans)
+    'max_directories': 5000,         # 최대 스캔 디렉토리 수 / Maximum number of directories to scan (prevents memory overload)
+    'scan_timeout_seconds': 100,    # 스캔 타임아웃 (초) / Scan timeout in seconds (prevents hanging)
+    'enable_progress_logging': True, # 진행 상황 로깅 활성화 / Enable progress logging for scan operations
+    'skip_hidden_dirs': True,      # 숨김 디렉토리 건너뛰기 / Skip hidden directories (names starting with .)
+    'early_exit_enabled': True,    # 조기 종료 활성화 / Enable early exit optimization (stop on first data file found)
+    'parallel_scanning': True,     # 병렬 스캔 활성화 / Enable parallel directory scanning for faster performance
+    'max_scan_threads': 64,         # 최대 스캔 스레드 수 / Maximum number of threads for parallel scanning
+    'per_directory_timeout': 5     # 디렉토리당 타임아웃 (초) / Timeout per directory in seconds
 } 

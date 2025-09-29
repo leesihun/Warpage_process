@@ -181,7 +181,7 @@ def export_to_pdf_from_webui_plots(plots_data, folder_data, output_filename='war
                 plt.close(fig)
         
         # Add comparison plot (side-by-side heatmaps)
-        if 'comparison' in plots_data:
+        if 'comparison' in plots_data and plots_data['comparison']:
             print("Adding comparison plot...")
             fig = base64_to_figure(plots_data['comparison'], figsize=(A4_LANDSCAPE_WIDTH, A4_LANDSCAPE_HEIGHT))
             pdf.savefig(fig, dpi=dpi, bbox_inches='tight')
@@ -190,9 +190,17 @@ def export_to_pdf_from_webui_plots(plots_data, folder_data, output_filename='war
         # Add 3D plots if available (though disabled by default)
         if '3d' in plots_data:
             print("Adding 3D surface plots...")
-            fig = base64_to_figure(plots_data['3d'], figsize=(A4_LANDSCAPE_WIDTH, A4_LANDSCAPE_HEIGHT))
-            pdf.savefig(fig, dpi=dpi, bbox_inches='tight')
-            plt.close(fig)
+            # Handle both single plot and list of plots
+            if isinstance(plots_data['3d'], list):
+                for i, plot_data in enumerate(plots_data['3d']):
+                    print(f"  Adding 3D surface plot page {i+1}/{len(plots_data['3d'])}")
+                    fig = base64_to_figure(plot_data, figsize=(A4_LANDSCAPE_WIDTH, A4_LANDSCAPE_HEIGHT))
+                    pdf.savefig(fig, dpi=dpi, bbox_inches='tight')
+                    plt.close(fig)
+            else:
+                fig = base64_to_figure(plots_data['3d'], figsize=(A4_LANDSCAPE_WIDTH, A4_LANDSCAPE_HEIGHT))
+                pdf.savefig(fig, dpi=dpi, bbox_inches='tight')
+                plt.close(fig)
     
     # Final cleanup
     plt.close('all')
@@ -205,7 +213,7 @@ def export_to_pdf_from_webui_plots(plots_data, folder_data, output_filename='war
 
 
 def export_to_pdf(folder_data, output_filename='warpage_analysis.pdf',
-                  include_stats=True, include_3d=True, include_advanced=True, dpi=150, cmap='jet', colorbar=True, vmin=None, vmax=None):
+                  include_stats=True, include_3d=True, include_advanced=True, dpi=150, cmap='jet', colorbar=True, vmin=None, vmax=None, optimize_for_pdf=None, config=None):
     """
     Export comprehensive warpage analysis to high-resolution PDF in report directory.
 
@@ -230,6 +238,16 @@ def export_to_pdf(folder_data, output_filename='warpage_analysis.pdf',
     # Ensure report directory exists
     report_dir = ensure_report_directory()
     full_output_path = os.path.join(report_dir, output_filename)
+
+    # Check config for PDF optimization if not specified
+    if optimize_for_pdf is None:
+        from config import DEFAULT_CONFIG
+        optimize_for_pdf = DEFAULT_CONFIG.get('optimize_pdf_data', True)
+
+    if optimize_for_pdf:
+        print("DEBUG: PDF optimization enabled - data will be resized for faster generation")
+    else:
+        print("DEBUG: PDF optimization disabled - using full resolution data")
 
     # Import functions lazily
     viz = _import_visualization()
@@ -268,7 +286,7 @@ def export_to_pdf(folder_data, output_filename='warpage_analysis.pdf',
         # Individual plots
         for file_id, (data, stats, filename) in folder_data.items():
             individual_fig = viz.create_individual_plot(file_id, data, stats, filename,
-                                                      figsize=(A4_WIDTH, A4_HEIGHT), vmin=vmin, vmax=vmax, cmap=cmap, colorbar=colorbar)
+                                                      figsize=(A4_WIDTH, A4_HEIGHT), vmin=vmin, vmax=vmax, cmap=cmap, colorbar=colorbar, optimize_for_pdf=True, config=config)
             pdf.savefig(individual_fig, dpi=dpi_individual, bbox_inches='tight')
             plt.close(individual_fig)
         
@@ -303,10 +321,11 @@ def export_to_pdf(folder_data, output_filename='warpage_analysis.pdf',
         # 3D surface plots (if requested)
         if include_3d and len(folder_data) > 0:
             try:
-                surface_fig = viz.create_3d_surface_plot(folder_data, figsize=(A4_LANDSCAPE_WIDTH, A4_LANDSCAPE_HEIGHT))
-                if surface_fig:
-                    pdf.savefig(surface_fig, dpi=dpi_3d, bbox_inches='tight')
-                    plt.close(surface_fig)
+                surface_figures = viz.create_3d_surface_plot(folder_data, figsize=(A4_LANDSCAPE_WIDTH, A4_LANDSCAPE_HEIGHT), optimize_for_pdf=True, config=config)
+                if surface_figures:
+                    for surface_fig in surface_figures:
+                        pdf.savefig(surface_fig, dpi=dpi_3d, bbox_inches='tight')
+                        plt.close(surface_fig)
             except Exception:
                 pass  # Skip if 3D plotting fails
     

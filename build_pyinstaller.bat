@@ -2,7 +2,7 @@
 setlocal EnableDelayedExpansion
 
 echo ========================================
-echo Building PEMTRON Warpage Tool with Nuitka
+echo Building PEMTRON Warpage Tool with PyInstaller
 echo ========================================
 echo.
 
@@ -20,17 +20,17 @@ if errorlevel 1 (
 for /f "tokens=*" %%p in ('python --version 2^>^&1') do set "PY_VER=%%p"
 echo Detected !PY_VER!
 
-REM Check Nuitka availability
-python -m nuitka --version >nul 2>&1
+REM Check PyInstaller availability
+python -m PyInstaller --version >nul 2>&1
 if errorlevel 1 (
-    echo [ERROR] Nuitka is not installed in the current Python environment.
-    echo         Install it with: pip install nuitka
+    echo [ERROR] PyInstaller is not installed in the current Python environment.
+    echo         Install it with: pip install pyinstaller
     goto :END
 )
 
 set "OUTPUT_DIR=dist"
 set "OUTPUT_NAME=PEMTRON_Warpage_Tool.exe"
-set "BUILD_LOG=%OUTPUT_DIR%\build.log"
+set "BUILD_LOG=%OUTPUT_DIR%\pyinstaller_build.log"
 
 if not exist "%OUTPUT_DIR%" (
     mkdir "%OUTPUT_DIR%"
@@ -39,32 +39,14 @@ if not exist "%OUTPUT_DIR%" (
 echo.
 echo Cleaning previous build artifacts...
 if exist "%OUTPUT_DIR%\%OUTPUT_NAME%" del /f /q "%OUTPUT_DIR%\%OUTPUT_NAME%" >nul 2>&1
-if exist "%OUTPUT_DIR%\web_server.build" rd /s /q "%OUTPUT_DIR%\web_server.build" >nul 2>&1
-if exist "%OUTPUT_DIR%\web_server.dist" rd /s /q "%OUTPUT_DIR%\web_server.dist" >nul 2>&1
+if exist "build" rd /s /q "build" >nul 2>&1
 
 echo.
-echo Starting Nuitka build... (log: %BUILD_LOG%)
+echo Starting PyInstaller build... (log: %BUILD_LOG%)
 echo This may take several minutes depending on your system.
 echo.
 
-python -m nuitka ^
-    --standalone ^
-    --onefile ^
-    --assume-yes-for-downloads ^
-    --mingw64 ^
-    --output-filename=%OUTPUT_NAME% ^
-    --output-dir=%OUTPUT_DIR% ^
-    --include-data-dir=templates=templates ^
-    --include-data-dir=data=data ^
-    --include-package=flask ^
-    --include-package=matplotlib ^
-    --include-package=numpy ^
-    --include-package=scipy ^
-    --enable-plugin=no-qt ^
-    --windows-console-mode=attach ^
-    --remove-output ^
-    --quiet ^
-    web_server.py >"%BUILD_LOG%" 2>&1
+python -m PyInstaller PEMTRON_Warpage_Tool.spec --clean --noconfirm >"%BUILD_LOG%" 2>&1
 
 set "BUILD_EXIT=!ERRORLEVEL!"
 
@@ -105,4 +87,3 @@ if exist "%OUTPUT_DIR%\%OUTPUT_NAME%" (
 popd >nul 2>&1
 echo.
 pause
-

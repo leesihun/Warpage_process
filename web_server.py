@@ -5,7 +5,6 @@ Provides web interface for warpage data analysis and visualization
 """
 
 import os
-import tempfile
 import webbrowser
 import threading
 import time
@@ -13,6 +12,9 @@ from pathlib import Path
 from flask import Flask, render_template, request, jsonify, send_file
 from flask_cors import CORS
 import gc  # For garbage collection
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend to prevent figure accumulation
+import matplotlib.pyplot as plt
 
 # Import analysis components
 from config import DEFAULT_CONFIG, WEB_PORT, get_data_dir
@@ -30,42 +32,192 @@ current_data = None
 current_plots = None
 current_stats = None
 
-def has_data_files_recursive(directory_path, max_depth=2, current_depth=0):
+# Import scanning configuration
+from config import SCAN_CONFIG
+
+# Cache for directory scan results - prevents repeated expensive filesystem operations
+_directory_cache = {}
+_cache_ttl = SCAN_CONFIG['cache_ttl_seconds']
+
+def cleanup_matplotlib_figures():
     """
-    Recursively check if a directory or its subdirectories contain data files.
+    Clean up matplotlib figures to prevent memory leaks and warnings.
+
+    This function closes all figures and forces garbage collection to prevent
+    the "more than 20 figures have been opened" warning.
+    """
+    plt.close('all')  # Close all matplotlib figures
+    gc.collect()      # Force garbage collection to free memory
+    print(f"DEBUG: Cleaned up matplotlib figures. Active figures: {len(plt.get_fignums())}")
+
+def _get_directory_cache_key(directory_path):
+    """Generate cache key based on directory path and modification time."""
+    try:
+        stat = os.stat(directory_path)
+        return f"{directory_path}:{stat.st_mtime}"
+    except (OSError, IOError):
+        return None
+
+def _clear_expired_cache():
+    """Clear expired cache entries to prevent memory growth."""
+    current_time = time.time()
+    expired_keys = [key for key, (result, timestamp) in _directory_cache.items()
+                   if current_time - timestamp > _cache_ttl]
+    for key in expired_keys:
+        del _directory_cache[key]
+
+def has_data_files_optimized(directory_path, max_depth=None):
+    """
+    Optimized check for data files in directory tree with caching and early exit.
+
+    Performance improvements:
+    - Single-pass directory traversal
+    - Result caching with TTL
+    - Early exit on first data file found
+    - Combined file pattern matching
 
     Args:
         directory_path (str): Path to directory to check
-        max_depth (int): Maximum depth to recurse (reduced for performance)
-        current_depth (int): Current recursion depth
+        max_depth (int): Maximum depth to recurse (uses config default if None)
 
     Returns:
         bool: True if data files are found anywhere in the directory tree
+    """
+    # Use configured default if not specified
+    if max_depth is None:
+        max_depth = SCAN_CONFIG['max_scan_depth']
+
+    # Clean expired cache entries periodically
+    _clear_expired_cache()
+
+    # Check cache first
+    cache_key = _get_directory_cache_key(directory_path)
+    if cache_key and cache_key in _directory_cache:
+        result, _ = _directory_cache[cache_key]
+        return result
+
+    try:
+        result = _scan_directory_tree(directory_path, max_depth, 0)
+
+        # Cache the result
+        if cache_key:
+            _directory_cache[cache_key] = (result, time.time())
+
+        return result
+    except (OSError, IOError, PermissionError):
+        return False
+
+def _scan_directory_tree(directory_path, max_depth, current_depth):
+    """
+    Internal recursive function for optimized directory scanning.
+
+    Uses single-pass scanning with combined pattern matching for maximum performance.
     """
     if current_depth > max_depth:
         return False
 
     try:
-        # Quick check: look for data files in current directory
-        if find_data_files(directory_path, True) or find_data_files(directory_path, False):
-            return True
+        # Single directory listing - much faster than multiple os.listdir calls
+        items = os.listdir(directory_path)
 
-        # Check subdirectories
-        try:
-            for item in os.listdir(directory_path):
-                if item.startswith('.'):
-                    continue
-                item_path = os.path.join(directory_path, item)
-                if os.path.isdir(item_path):
-                    if has_data_files_recursive(item_path, max_depth, current_depth + 1):
-                        return True
-        except (OSError, IOError, PermissionError):
-            pass
+        # Define all patterns to check in one pass
+        from config import FILE_PATTERNS
+        original_patterns = FILE_PATTERNS['original']
+        original_pkg_patterns = FILE_PATTERNS.get('original_with_package', [])
+        akrometrix_patterns = FILE_PATTERNS.get('akrometrix', [])
+
+        subdirectories = []
+
+        # Single pass through directory contents
+        for item in items:
+            if item.startswith('.'):
+                continue
+
+            # Check for data files (any type) - early exit on first match
+            if (any(item.endswith(pattern) for pattern in original_patterns) or
+                any(item.endswith(pattern) for pattern in original_pkg_patterns) or
+                any(item.endswith(pattern) for pattern in akrometrix_patterns) or
+                (item.endswith('.txt') and not any(item.endswith(pattern) for pattern in original_patterns + original_pkg_patterns))):
+                return True  # Early exit - found data files
+
+            # Collect subdirectories for recursive checking
+            item_path = os.path.join(directory_path, item)
+            if os.path.isdir(item_path):
+                subdirectories.append(item_path)
+
+        # Only recurse if no data files found in current directory
+        for subdir in subdirectories:
+            if _scan_directory_tree(subdir, max_depth, current_depth + 1):
+                return True  # Early exit on first subdirectory with data
 
         return False
 
     except (OSError, IOError, PermissionError):
         return False
+
+# Backward compatibility alias
+has_data_files_recursive = has_data_files_optimized
+
+def _scan_directories_parallel(potential_dirs):
+    """
+    Scan directories in parallel for maximum speed.
+
+    Args:
+        potential_dirs (list): List of (item_name, item_path) tuples
+
+    Returns:
+        list: List of directory names that contain data files
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import threading
+
+    if not potential_dirs:
+        return []
+
+    # Use thread-safe progress tracking
+    progress_lock = threading.Lock()
+    folders_with_data = []
+    processed_count = [0]
+
+    def scan_single_directory(item_tuple):
+        """Scan a single directory for data files."""
+        item_name, item_path = item_tuple
+        try:
+            has_data = has_data_files_recursive(item_path)
+
+            # Thread-safe progress update
+            with progress_lock:
+                processed_count[0] += 1
+                print(f"DEBUG: [{processed_count[0]}/{len(potential_dirs)}] {item_name}: {'✓ HAS DATA' if has_data else '✗ no data'}")
+
+            return (item_name, has_data)
+        except Exception as e:
+            with progress_lock:
+                processed_count[0] += 1
+                print(f"DEBUG: [{processed_count[0]}/{len(potential_dirs)}] {item_name}: ERROR - {e}")
+            return (item_name, False)
+
+    # Determine optimal number of threads from config
+    max_workers = min(len(potential_dirs), SCAN_CONFIG['max_scan_threads'])
+    timeout_per_dir = SCAN_CONFIG['per_directory_timeout']
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submit all directory scan tasks
+        future_to_dir = {executor.submit(scan_single_directory, item_tuple): item_tuple
+                        for item_tuple in potential_dirs}
+
+        # Collect results as they complete
+        for future in as_completed(future_to_dir):
+            try:
+                item_name, has_data = future.result(timeout=timeout_per_dir)
+                if has_data:
+                    folders_with_data.append(item_name)
+            except Exception as e:
+                item_tuple = future_to_dir[future]
+                print(f"DEBUG: Failed to scan {item_tuple[0]}: {e}")
+
+    print(f"DEBUG: Parallel scan used {max_workers} threads for {len(potential_dirs)} directories")
+    return sorted(folders_with_data)
 
 @app.route('/')
 def index():
@@ -74,9 +226,10 @@ def index():
 
 @app.route('/api/folders')
 def get_folders():
-    """Get available data folders - optimized for performance"""
+    """Get available data folders - optimized for performance with progress feedback"""
     try:
         data_dir = get_data_dir()
+        print(f"DEBUG: Found data directory at: {data_dir}")
 
         if not os.path.isabs(data_dir):
             data_dir = os.path.join(os.getcwd(), data_dir)
@@ -84,19 +237,40 @@ def get_folders():
         folders = []
         if os.path.exists(data_dir):
             try:
-                for item in os.listdir(data_dir):
-                    if item.startswith('.'):
-                        continue
-                    item_path = os.path.join(data_dir, item)
-                    if os.path.isdir(item_path) and has_data_files_recursive(item_path):
-                        folders.append(item)
+                # Get list of potential directories first
+                all_items = [item for item in os.listdir(data_dir)
+                           if not item.startswith('.')]
+                potential_dirs = [(item, os.path.join(data_dir, item))
+                                for item in all_items
+                                if os.path.isdir(os.path.join(data_dir, item))]
+
+                # Apply directory limit from config
+                max_dirs = SCAN_CONFIG['max_directories']
+                if len(potential_dirs) > max_dirs:
+                    print(f"DEBUG: Limiting scan to first {max_dirs} directories (config limit)")
+                    potential_dirs = potential_dirs[:max_dirs]
+
+                print(f"DEBUG: Scanning {len(potential_dirs)} directories for data files using parallel processing...")
+
+                # Use parallel scanning for much faster performance
+                scan_start_time = time.time()
+                folders = _scan_directories_parallel(potential_dirs)
+                scan_duration = time.time() - scan_start_time
+
+                print(f"DEBUG: Parallel directory scan completed in {scan_duration:.2f}s. Found {len(folders)} folders with data files.")
+
             except (OSError, IOError, PermissionError) as e:
+                print(f"ERROR: Could not access data directory: {str(e)}")
                 return jsonify({'error': f'Could not access data directory: {str(e)}'}), 500
 
         folders.sort()
         return jsonify({
             'folders': folders,
-            'data_directory': data_dir
+            'data_directory': data_dir,
+            'scan_summary': {
+                'total_directories': len(potential_dirs) if 'potential_dirs' in locals() else 0,
+                'directories_with_data': len(folders)
+            }
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -120,11 +294,11 @@ def analyze():
     global current_data, current_plots, current_stats
 
     try:
-        # Clear previous data to free memory
+        # Clear previous data and figures to free memory
         current_data = None
         current_plots = None
         current_stats = None
-        gc.collect()  # Force garbage collection
+        cleanup_matplotlib_figures()  # Clean up any existing figures
 
         data = request.get_json()
         folder = data.get('folder')
@@ -172,28 +346,58 @@ def analyze():
         if parallel_processing and fast_plots:
             # Use parallel plot generation for maximum speed
             individual_plots = visualization.create_plots_parallel(
-                current_data, vmin=vmin, vmax=vmax, cmap=cmap, dpi=dpi
+                current_data, vmin=vmin, vmax=vmax, cmap=cmap, dpi=dpi, config=DEFAULT_CONFIG
             )
         else:
             # Fallback to sequential processing
             individual_plots = []
             for file_id, (data_array, stats, filename) in current_data.items():
                 fig = visualization.create_individual_plot(file_id, data_array, stats, filename,
-                                                         vmin=vmin, vmax=vmax, cmap=cmap)
+                                                         vmin=vmin, vmax=vmax, cmap=cmap, config=DEFAULT_CONFIG)
                 plot_base64 = visualization.figure_to_base64(fig, dpi=dpi)
                 individual_plots.append(plot_base64)
 
         # Create comparison plot
         comparison_plot = ''
         if len(current_data) > 1:
-            comparison_figs = visualization.create_comparison_plot(current_data, vmin=vmin, vmax=vmax, cmap=cmap)
+            comparison_figs = visualization.create_comparison_plot(current_data, vmin=vmin, vmax=vmax, cmap=cmap, config=DEFAULT_CONFIG)
             if comparison_figs:
                 comparison_plot = visualization.figure_to_base64(comparison_figs[0], dpi=dpi)
 
+        # Create 3D plots if data is available
+        three_d_plots = []
+        if current_data:
+            three_d_plots = visualization.create_3d_surface_plot_web(current_data, config=DEFAULT_CONFIG)
+
+        # Create advanced statistics if data is available
+        advanced_plots = []
+        if current_data and len(current_data) > 1:
+            try:
+                # Import advanced statistics
+                from advanced_statistics import create_comprehensive_advanced_analysis
+
+                # Generate advanced analysis plots
+                advanced_analysis = create_comprehensive_advanced_analysis(current_data, vmin=vmin, vmax=vmax)
+                if advanced_analysis:
+                    for fig, title in advanced_analysis:
+                        plot_base64 = visualization.figure_to_base64(fig, dpi=dpi)
+                        advanced_plots.append({
+                            'title': title,
+                            'image': plot_base64
+                        })
+                print(f"Generated {len(advanced_plots)} advanced analysis plots")
+            except Exception as e:
+                print(f"Advanced analysis generation failed: {e}")
+
         current_plots = {
             'individual': individual_plots,
-            'comparison': comparison_plot
+            'comparison': comparison_plot,
+            '3d': three_d_plots,
+            'advanced': advanced_plots
         }
+
+        # Clean up any figures created during analysis to prevent memory leaks
+        cleanup_matplotlib_figures()
 
         # Prepare response
         file_list = [filename for _, _, filename in current_data.values()]
@@ -308,37 +512,61 @@ def export_pdf_report():
             return jsonify({'error': 'No analysis data available'}), 400
         
         # Handle both GET and POST requests - avoid any automatic JSON parsing
-        filename = 'warpage_analysis_report.pdf'  # default
-        
+        pdf_filename = 'warpage_analysis_report.pdf'  # default
+
         if request.method == 'POST':
             # For POST, only try JSON if content type is explicitly set
             try:
                 content_type = request.content_type or ''
                 if 'application/json' in content_type:
                     data = request.get_json(force=False, silent=True) or {}
-                    filename = data.get('filename', filename)
+                    pdf_filename = data.get('filename', pdf_filename)
             except Exception:
                 pass  # Use default filename
         else:
             # For GET, use query parameters
-            filename = request.args.get('filename', filename)
-        
-        # Create temporary file
-        temp_dir = Path(tempfile.gettempdir())
-        output_path = temp_dir / filename
-        
-        # Generate PDF report
+            pdf_filename = request.args.get('filename', pdf_filename)
+
+        # Ensure filename has .pdf extension
+        if not pdf_filename.endswith('.pdf'):
+            pdf_filename += '.pdf'
+
+        # Generate PDF report using web UI plots for consistency
         import pdf_exporter
-        pdf_path = pdf_exporter.export_to_pdf(
-            current_data, 
-            str(output_path),
-            include_stats=True,
-            include_3d=True,
-            include_advanced=True
+
+        # Build comprehensive plots response
+        all_plots = {
+            'individual': [],
+            'comparison': current_plots.get('comparison', ''),
+            '3d': current_plots.get('3d', []),
+            'advanced': current_plots.get('advanced', [])
+        }
+
+        # Add individual plots with file_id information
+        if current_plots and 'individual' in current_plots:
+            for i, (file_id, (_, _, data_filename)) in enumerate(current_data.items()):
+                if i < len(current_plots['individual']):
+                    all_plots['individual'].append({
+                        'file_id': file_id,
+                        'image': current_plots['individual'][i],
+                        'filename': data_filename
+                    })
+
+        pdf_path = pdf_exporter.export_to_pdf_from_webui_plots(
+            all_plots,
+            current_data,
+            pdf_filename
         )
-        
+
+        # Debug: Print file information
+        print(f"DEBUG: Sending PDF file: {pdf_path}")
+        print(f"DEBUG: Download name: {pdf_filename}")
+        print(f"DEBUG: File exists: {os.path.exists(pdf_path)}")
+        if os.path.exists(pdf_path):
+            print(f"DEBUG: File size: {os.path.getsize(pdf_path)} bytes")
+
         # Return the file for download
-        return send_file(pdf_path, as_attachment=True, download_name=filename)
+        return send_file(pdf_path, as_attachment=True, download_name=pdf_filename, mimetype='application/pdf')
             
     except Exception as e:
         return jsonify({'error': f'PDF export error: {str(e)}'}), 500
@@ -358,11 +586,12 @@ def get_3d_plot():
             return jsonify({'error': 'No analysis data available'}), 404
         
         # Create 3D surface plot using visualization module
-        plot_base64 = visualization.create_3d_surface_plot(current_data)
-        
+        plot_base64_list = visualization.create_3d_surface_plot_web(current_data, config=DEFAULT_CONFIG)
+
         return jsonify({
             'success': True,
-            'image': plot_base64
+            'images': plot_base64_list,
+            'total_pages': len(plot_base64_list)
         })
         
     except Exception as e:
@@ -472,22 +701,34 @@ def get_distribution_plot():
 def get_advanced_analysis():
     """Get advanced analysis plots"""
     global current_data
-    
+
     try:
         if not current_data:
             return jsonify({'error': 'No analysis data available'}), 404
-        
-        # Create comprehensive advanced analysis
-        plot_base64 = visualization.create_comprehensive_advanced_analysis(current_data)
-        
-        return jsonify({
-            'success': True,
-            'plots': [{
-                'title': 'Advanced Statistical Analysis',
-                'image': plot_base64
-            }]
-        })
-        
+
+        # Use the advanced statistics module for comprehensive analysis
+        from advanced_statistics import create_comprehensive_advanced_analysis
+        advanced_analysis = create_comprehensive_advanced_analysis(current_data)
+
+        if advanced_analysis:
+            plots = []
+            for fig, title in advanced_analysis:
+                plot_base64 = visualization.figure_to_base64(fig, dpi=150)
+                plots.append({
+                    'title': title,
+                    'image': plot_base64
+                })
+
+            return jsonify({
+                'success': True,
+                'plots': plots
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'No advanced analysis plots generated'
+            })
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
