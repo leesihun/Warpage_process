@@ -59,7 +59,12 @@
       "Bash(\".venv312\\Scripts\\python.exe\" -m pip list)",
       "Bash(\".venv312\\Scripts\\python.exe\" -m PyInstaller --onefile --name \"Auto_PDF\" Auto_PDF.py)",
       "Bash(\".venv312\\Scripts\\python.exe\" -m PyInstaller --onefile --name \"Auto_PDF\" Auto_PDF.py --clean)",
-      "Bash(\"./dist/Auto_PDF.exe\" --help)"
+      "Bash(\"./dist/Auto_PDF.exe\" --help)",
+      "Bash(\"./data_autotransfer/dist/DataAutoTransfer.exe\" --help)",
+      "Bash(...venv312Scriptspython.exe -m pip install -r requirements.txt)",
+      "Bash(\"..\\.venv312\\Scripts\\python.exe\" -m pip install -r requirements.txt)",
+      "Bash(\"./data_autotransfer/dist/DataAutoTransfer.exe\" --dry-run --once)",
+      "Bash(copy data_autotransferconfig.txt data_autotransferdist)"
     ],
     "deny": [],
     "ask": []

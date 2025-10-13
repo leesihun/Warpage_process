@@ -1,0 +1,29 @@
+# Data Auto Transfer System Requirements
+
+# Core scheduling library
+schedule>=1.2.0
+
+# For SSH/SCP transfers (optional - system ssh can be used)
+paramiko>=2.11.0
+
+# For SMB/CIFS transfers on non-Windows systems (optional)
+smbprotocol>=1.10.0
+
+# Enhanced password handling for SSH (optional)
+# Note: sshpass needs to be installed separately on the system
+# For Windows: Download from https://www.openssh.com/
+# For Linux: sudo apt-get install sshpass
+
+# Standard library modules used (no installation needed):
+# - os
+# - sys
+# - time
+# - datetime
+# - logging
+# - logging.handlers
+# - threading
+# - signal
+# - shutil
+# - subprocess
+# - argparse
+# - typing

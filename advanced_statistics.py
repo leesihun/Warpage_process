@@ -604,7 +604,6 @@ def create_pca_visualization(folder_data, figsize=(8.27, 11.69)):
     axes[2].set_ylabel(f'PC2 ({pca.explained_variance_ratio_[1]:.1%} variance)')
     axes[2].set_title('PCA - PC1 vs PC2')
     axes[2].grid(True, alpha=0.3)
-    axes[2].legend()
     
     plt.tight_layout()
     return fig

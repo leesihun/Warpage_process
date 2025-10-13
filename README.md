@@ -6,16 +6,26 @@ A powerful, user-friendly application for analyzing semiconductor warpage measur
 ![Python](https://img.shields.io/badge/python-3.8+-green.svg)
 ![License](https://img.shields.io/badge/license-Proprietary-red.svg)
 
-## 🚀 Latest Updates (v2.1.1) - SERVER FIX
+## 🚀 Latest Updates (v2.1.1) - SERVER FIX & EXECUTABLE BUILD
 
-### 🔧 **CRITICAL INTERNAL SERVER ERROR FIX** 🔧
+### 🔧 **CRITICAL FIXES & NEW EXECUTABLE** 🔧
 - **FIXED**: Resolved Internal Server Error when accessing web interface
-- **ROOT CAUSE**: Server was running from incorrect directory (`dist` instead of main project)
-- **SOLUTION**: Web server must be run from main project directory where `templates` folder exists
-- **STATUS**: Main route now returns 200 OK, all API endpoints functional
-- **DIRECTORY**: Server now correctly runs from `C:\Users\Lee\Desktop\Huni\PEMTRON_warpage`
+- **FIXED**: Unicode character encoding error in folder scanning (Windows compatibility)
+- **NEW**: Successfully built standalone executable `PEMTRON_Warpage_Tool.exe` (820MB)
+- **ROOT CAUSE**: Server was running from incorrect directory + Unicode symbols in debug output
+- **SOLUTION**: Proper directory handling + removed problematic Unicode characters (✓, ✗)
+- **STATUS**: ✅ All routes working, folders detected correctly, executable tested and functional
 
-### ✅ **How to Run Server Correctly**
+### ✅ **How to Run (Two Options)**
+
+**Option 1: Run Standalone Executable (Recommended)**
+```bash
+# Navigate to dist folder and run executable
+cd "C:\Users\Lee\Desktop\Huni\PEMTRON_warpage\dist"
+PEMTRON_Warpage_Tool.exe
+```
+
+**Option 2: Run from Python Source**
 ```bash
 # Navigate to main project directory (NOT dist folder)
 cd "C:\Users\Lee\Desktop\Huni\PEMTRON_warpage"
@@ -25,10 +35,13 @@ python web_server.py
 ```
 
 ### 🧪 **Verification Tests**
-- ✅ Main route: HTTP 200 OK
-- ✅ Templates directory: Found and accessible  
-- ✅ Data directory: Exists and functional
-- ✅ All API endpoints: Working correctly
+- ✅ **Main route**: HTTP 200 OK
+- ✅ **Templates directory**: Found and accessible  
+- ✅ **Data directory**: Exists and functional
+- ✅ **Folder scanning**: 10 folders with data files detected
+- ✅ **Unicode compatibility**: Fixed Windows encoding issues
+- ✅ **Executable build**: 820MB standalone executable working
+- ✅ **All API endpoints**: Working correctly
 
 ## 🚀 Previous Updates (v2.1.0) - MASSIVE PERFORMANCE BOOST!
 
@@ -720,11 +733,13 @@ Cross-Origin Resource Sharing (CORS) is enabled for all endpoints to support web
 
 ## 🔄 Version History
 
-### v2.1.1 (Current) - CRITICAL SERVER FIX
+### v2.1.1 (Current) - CRITICAL FIXES & EXECUTABLE BUILD
 - 🔧 **CRITICAL FIX**: Resolved Internal Server Error that prevented web interface from loading
-- 🔧 **ROOT CAUSE**: Server was running from incorrect directory (dist instead of main project)  
-- 🔧 **SOLUTION**: Web server must now be run from main project directory where templates folder exists
-- ✅ **STATUS**: All routes now return proper HTTP 200 responses, full functionality restored
+- 🔧 **UNICODE FIX**: Fixed character encoding error in folder scanning (Windows compatibility)
+- 🚀 **NEW BUILD**: Successfully created standalone executable `PEMTRON_Warpage_Tool.exe` (820MB)
+- 🔧 **ROOT CAUSES**: Directory path issues + Unicode symbols (✓, ✗) in debug output causing cp949 codec errors
+- 🔧 **SOLUTIONS**: Proper directory handling + removed problematic Unicode characters
+- ✅ **STATUS**: All routes working, 10 folders detected correctly, executable tested and functional
 
 ### v2.1.0 - MAJOR PERFORMANCE RELEASE
 - 🚀 **REVOLUTIONARY**: Implemented full multiprocessing pipeline for 3-5x faster processing

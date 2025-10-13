@@ -255,7 +255,7 @@ def export_to_pdf_from_webui_plots(plots_data, folder_data, output_filename='war
             # Generate all detailed plots using multiprocessing
             detailed_plots_map = {}
             if file_data_tuples:
-                max_workers = min(len(file_data_tuples), multiprocessing.cpu_count())
+                max_workers = min(len(file_data_tuples), multiprocessing.cpu_count(), 61)
                 print(f"Using {max_workers} processes to generate {len(file_data_tuples)} file analysis sets...")
                 
                 with ProcessPoolExecutor(max_workers=max_workers) as executor:

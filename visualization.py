@@ -200,7 +200,7 @@ def create_plots_parallel(folder_data, vmin=None, vmax=None, cmap='jet', dpi=120
 
     # Auto worker count based on CPU cores and number of plots
     if max_workers is None:
-        max_workers = min(len(folder_data), multiprocessing.cpu_count())
+        max_workers = min(len(folder_data), multiprocessing.cpu_count(), 61)
 
     def create_single_plot(item):
         """Create a single plot - designed for parallel execution"""

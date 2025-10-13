@@ -282,15 +282,15 @@ def extract_center_region(data_array, row_fraction=1, col_fraction=1):
     return data_array[row_start:row_end, col_start:col_end]
 
 
-def find_data_files(folder_path, use_original_files=True):
+def find_data_files(folder_path, file_type='original'):
     """
     지정된 폴더에서 모든 데이터 파일 찾기 (원본, 보정된 파일, 또는 AKROMETRIX 파일)
     Find all data files in a given folder (original, corrected, or AKROMETRIX files).
 
     Args:
         folder_path (str): 폴더 경로 / Path to the folder
-        use_original_files (bool): True면 원본 파일들 우선, False면 보정된 파일 우선
-                                  If True, prioritize original files, if False, prioritize corrected files
+        file_type (str): 파일 타입 - 'original', 'original_with_package', 'corrected', 'akrometrix'
+                        File type - 'original', 'original_with_package', 'corrected', 'akrometrix'
 
     Returns:
         list: 데이터 파일들의 전체 경로 목록, 없으면 빈 목록 / List of full paths to the data files, or empty list if none found
@@ -323,16 +323,32 @@ def find_data_files(folder_path, use_original_files=True):
             elif f.endswith('.txt'):
                 corrected_files.append(f)
 
-        # 우선순위에 따른 파일 선택 / Select files based on priority
-        if use_original_files:
-            search_order = [original_files, original_pkg_files, corrected_files, akrometrix_files]
+        # 파일 타입에 따른 선택 / Select files based on specific file type
+        if file_type == 'original':
+            target_files = original_files
+        elif file_type == 'original_with_package':
+            target_files = original_pkg_files
+        elif file_type == 'corrected':
+            target_files = corrected_files
+        elif file_type == 'akrometrix':
+            target_files = akrometrix_files
         else:
-            search_order = [corrected_files, original_files, original_pkg_files, akrometrix_files]
+            # Fallback to priority order for backward compatibility
+            if file_type in ['original', 'original_with_package']:
+                search_order = [original_files, original_pkg_files, corrected_files, akrometrix_files]
+            else:
+                search_order = [corrected_files, original_files, original_pkg_files, akrometrix_files]
 
-        for file_list in search_order:
-            if file_list:
-                file_list.sort()  # 일관된 순서
-                return [os.path.join(folder_path, f) for f in file_list]
+            for file_list in search_order:
+                if file_list:
+                    file_list.sort()  # 일관된 순서
+                    return [os.path.join(folder_path, f) for f in file_list]
+            return []
+
+        # Return specific file type if found
+        if target_files:
+            target_files.sort()  # 일관된 순서
+            return [os.path.join(folder_path, f) for f in target_files]
 
         return []
     except Exception:
@@ -367,7 +383,7 @@ def _process_single_file_worker(file_path, row_fraction, col_fraction, downsampl
         return None
 
 
-def process_folder_data_parallel(base_path, folder, row_fraction=1, col_fraction=1, use_original_files=True, downsample_factor=1, max_workers=None):
+def process_folder_data_parallel(base_path, folder, row_fraction=1, col_fraction=1, file_type='original', downsample_factor=1, max_workers=None):
     """
     병렬 처리로 단일 폴더의 모든 파일 데이터 처리 - ProcessPoolExecutor로 최대 속도
     Parallel process data for all files in a single folder - maximum speed with ProcessPoolExecutor.
@@ -377,7 +393,7 @@ def process_folder_data_parallel(base_path, folder, row_fraction=1, col_fraction
         folder (str): 폴더 이름 / Folder name
         row_fraction (float): 중앙에서 유지할 행의 비율 / Fraction of rows to keep in center
         col_fraction (float): 중앙에서 유지할 열의 비율 / Fraction of columns to keep in center
-        use_original_files (bool): 원본 vs 보정 파일 / Original vs corrected files
+        file_type (str): 파일 타입 - 'original', 'original_with_package', 'corrected', 'akrometrix'
         downsample_factor (int): 데이터 다운샘플링 비율 / Data downsampling factor (1=no downsampling, 2=half, 4=quarter, etc.)
         max_workers (int): 최대 워커 수 / Maximum worker processes (None=auto)
 
@@ -389,14 +405,14 @@ def process_folder_data_parallel(base_path, folder, row_fraction=1, col_fraction
     import multiprocessing
 
     folder_path = os.path.join(base_path, folder)
-    file_paths = find_data_files(folder_path, use_original_files)
+    file_paths = find_data_files(folder_path, file_type)
 
     if not file_paths:
         return []
 
-    # 자동 워커 수 설정 - CPU 코어 수 기반 / Auto worker count based on CPU cores  
+    # 자동 워커 수 설정 - CPU 코어 수 기반 / Auto worker count based on CPU cores
     if max_workers is None:
-        max_workers = min(len(file_paths), multiprocessing.cpu_count())  # One process per CPU core for optimal performance
+        max_workers = min(len(file_paths), multiprocessing.cpu_count(), 61)  # One process per CPU core for optimal performance, capped at 61 for Windows
 
     def process_single_file_fast(file_path):
         """Fast single file processing with caching and memory optimization"""
@@ -444,11 +460,11 @@ def process_folder_data_parallel(base_path, folder, row_fraction=1, col_fraction
     results.sort(key=lambda x: x[2])
     return results
 
-def process_folder_data(base_path, folder, row_fraction=1, col_fraction=1, use_original_files=True, downsample_factor=1):
+def process_folder_data(base_path, folder, row_fraction=1, col_fraction=1, file_type='original', downsample_factor=1):
     """
     Backward compatible wrapper - uses parallel processing by default for maximum speed
     """
-    return process_folder_data_parallel(base_path, folder, row_fraction, col_fraction, use_original_files, downsample_factor)
+    return process_folder_data_parallel(base_path, folder, row_fraction, col_fraction, file_type, downsample_factor)
 
 
 def get_file_size(file_path):
@@ -501,7 +517,7 @@ def process_batch_files(file_paths, row_fraction=1.0, col_fraction=1.0):
     start_time = time.time()
     
     # Calculate optimal worker count
-    max_workers = min(len(file_paths), multiprocessing.cpu_count())
+    max_workers = min(len(file_paths), multiprocessing.cpu_count(), 61)
     print(f"Using {max_workers} processes for batch processing...")
     
     # Process files in parallel using multiprocessing

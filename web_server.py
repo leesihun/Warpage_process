@@ -199,7 +199,7 @@ def _scan_directories_parallel(potential_dirs):
             return (item_name, False)
 
     # Determine optimal number of threads from config
-    max_workers = min(len(potential_dirs), SCAN_CONFIG['max_scan_threads'])
+    max_workers = min(len(potential_dirs), SCAN_CONFIG['max_scan_threads'], 61)
     timeout_per_dir = SCAN_CONFIG['per_directory_timeout']
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -312,8 +312,7 @@ def analyze():
         if not folder:
             return jsonify({'error': 'No folder selected'}), 400
 
-        # Determine use_original based on file_type
-        use_original = file_type in ['original', 'original_with_package']
+        # File type is now passed directly instead of use_original boolean
 
         # Get performance settings from request
         downsample_factor = int(data.get('downsample_factor', 1))
@@ -324,10 +323,10 @@ def analyze():
         data_dir = get_data_dir()
         if parallel_processing:
             folder_results = process_folder_data_parallel(
-                data_dir, folder, row_fraction, col_fraction, use_original, downsample_factor
+                data_dir, folder, row_fraction, col_fraction, file_type, downsample_factor
             )
         else:
-            folder_results = process_folder_data(data_dir, folder, row_fraction, col_fraction, use_original, downsample_factor)
+            folder_results = process_folder_data(data_dir, folder, row_fraction, col_fraction, file_type, downsample_factor)
 
         if not folder_results:
             return jsonify({'error': f'No data found in folder: {folder}'}), 400
@@ -847,6 +846,10 @@ def open_browser():
         print(f"Please manually open: http://localhost:{WEB_PORT}")
 
 if __name__ == '__main__':
+    # Required for multiprocessing in PyInstaller executables
+    import multiprocessing
+    multiprocessing.freeze_support()
+
     print("=" * 60)
     print("PEMTRON Warpage Analysis Tool - Web Interface")
     print("=" * 60)
