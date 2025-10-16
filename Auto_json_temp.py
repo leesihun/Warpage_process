@@ -63,7 +63,7 @@ def daily_pdf_generator():
                 print(f"Starting daily PDF generation at {now.strftime('%Y-%m-%d %H:%M:%S')}")
 
                 previous_day_folder = get_previous_day_folder()
-                print(f"Generating PDF for previous day: {previous_day_folder}")
+                print(f"Generating PDF for previous day: {'data/' + previous_day_folder}")
                 previous_day_folder = previous_day_folder.replace('-', '')
 
                 # Move folder to data directory
