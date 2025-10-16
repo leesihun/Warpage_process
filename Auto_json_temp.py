@@ -53,32 +53,11 @@ def get_previous_day_folder():
 
 def daily_pdf_generator():
     while True:
-        now = datetime.now()
         try:
-            now = now - timedelta(days=1)
-
             if True:
                 # Move the folders in same directory to data folder
                 start_time = time.time()
-                print(f"Starting daily PDF generation at {now.strftime('%Y-%m-%d %H:%M:%S')}")
-
-                previous_day_folder = get_previous_day_folder()
-                print(f"Generating PDF for previous day: {'data/' + previous_day_folder}")
-                previous_day_folder = previous_day_folder.replace('-', '')
-
-                # Move folder to data directory
-                print(f"Moving folder: {previous_day_folder}")
-                if os.path.exists(previous_day_folder):
-                    dest_path = f"data/{previous_day_folder}"
-                    if os.path.exists(dest_path):
-                        print(f"Destination folder already exists: {dest_path}")
-                    else:
-                        os.rename(previous_day_folder, dest_path)
-                        print(f"Folder moved to: {dest_path}")
-                else:
-                    print(f"Source folder does not exist: {previous_day_folder}")
-
-                print(f"Using folder: {'data/' + previous_day_folder}")
+                previous_day_folder = './data/20250923'
 
                 success = generate_pdf(previous_day_folder)
                 if success:
