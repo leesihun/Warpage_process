@@ -7,6 +7,8 @@ PDF export functions for Warpage Analyzer
 import os
 import base64
 import io
+import json
+import math
 from matplotlib.backends.backend_pdf import PdfPages
 from config import REPORT_DIR
 import matplotlib.pyplot as plt
@@ -183,6 +185,166 @@ def base64_to_figure(base64_string, figsize=(8.27, 11.69)):
     ax.axis('off')  # Remove axes for clean image display
     
     return fig
+
+
+def _safe_float(value):
+    """Convert value to native float while handling NaN/None gracefully."""
+    try:
+        val = float(value)
+    except (TypeError, ValueError):
+        return None
+    return None if math.isnan(val) else val
+
+
+def _export_statistics_json(folder_data, full_output_path, json_output_path=None):
+    """
+    Persist per-file statistics (including PCA components) alongside the PDF report.
+
+    Args:
+        folder_data (dict): Mapping of file_id -> (data_array, stats_dict, filename)
+        full_output_path (str): Absolute path to the generated PDF
+        json_output_path (str, optional): Explicit path for the JSON file.
+
+    Returns:
+        str or None: Path to the JSON file if written successfully.
+    """
+    try:
+        if not folder_data:
+            return None
+
+        ordered_items = list(folder_data.items())
+        if not ordered_items:
+            return None
+
+        # Attempt to compute PCA components when multiple files are present
+        pca_components = {}
+        if len(ordered_items) >= 2:
+            try:
+                from advanced_statistics import perform_pca_analysis
+
+                # Retain ordering by rebuilding an ordered dict
+                ordered_dict = {file_id: data_tuple for file_id, data_tuple in ordered_items}
+                _, pca_result, _ = perform_pca_analysis(ordered_dict)
+                if pca_result is not None:
+                    for idx, file_id in enumerate(ordered_dict.keys()):
+                        if idx < len(pca_result):
+                            row = pca_result[idx]
+                            pc1 = row[0] if row.size > 0 else None
+                            pc2 = row[1] if row.size > 1 else None
+                            pca_components[file_id] = (pc1, pc2)
+            except Exception as exc:
+                print(f"WARNING: PCA computation failed for statistics JSON: {exc}")
+
+        entries = []
+        for file_id, (data_array, stats, filename) in ordered_items:
+            stats_dict = stats or {}
+
+            # Backfill missing higher-order metrics when necessary
+            needs_extended = any(key not in stats_dict for key in ('median', 'skewness', 'kurtosis'))
+            if needs_extended and data_array is not None:
+                try:
+                    from warpage_statistics import calculate_statistics
+                    recomputed = calculate_statistics(data_array)
+                    stats_dict = {**stats_dict, **recomputed}
+                except Exception as exc:
+                    print(f"WARNING: Could not recompute extended statistics for {file_id}: {exc}")
+
+            pc_tuple = pca_components.get(file_id, (None, None))
+
+            min_val = _safe_float(stats_dict.get('min'))
+            max_val = _safe_float(stats_dict.get('max'))
+            range_val = _safe_float(stats_dict.get('range'))
+            mean_val = _safe_float(stats_dict.get('mean'))
+            median_val = _safe_float(stats_dict.get('median'))
+            std_val = _safe_float(stats_dict.get('std'))
+            skew_val = _safe_float(stats_dict.get('skewness'))
+            kurt_val = _safe_float(stats_dict.get('kurtosis'))
+            pc1_val = _safe_float(pc_tuple[0])
+            pc2_val = _safe_float(pc_tuple[1])
+
+            max_minus_min = range_val
+            if max_minus_min is None and min_val is not None and max_val is not None:
+                max_minus_min = _safe_float(max_val - min_val)
+
+            entry = {
+                'file_id': file_id,
+                'filename': filename,
+                'min': min_val,
+                'max': max_val,
+                'range': range_val,
+                'max_minus_min': max_minus_min,
+                'mean': mean_val,
+                'median': median_val,
+                'std': std_val,
+                'skewness': skew_val,
+                'kurtosis': kurt_val,
+                'pca': {
+                    'pc1': pc1_val,
+                    'pc2': pc2_val
+                }
+            }
+            entries.append(entry)
+
+        payload = {
+            'source_pdf': os.path.basename(full_output_path),
+            'file_count': len(entries),
+            'files': entries
+        }
+
+        if json_output_path:
+            json_path = json_output_path
+        else:
+            json_path = os.path.splitext(full_output_path)[0] + '_stats.json'
+
+        json_dir = os.path.dirname(json_path)
+        if json_dir and not os.path.exists(json_dir):
+            os.makedirs(json_dir, exist_ok=True)
+
+        with open(json_path, 'w', encoding='utf-8') as json_file:
+            json.dump(payload, json_file, indent=2)
+
+        print(f"Statistics JSON created: {json_path}")
+        return json_path
+    except Exception as exc:
+        print(f"WARNING: Failed to write statistics JSON: {exc}")
+        return None
+
+
+def export_statistics_json(folder_data, output_filename=None, pdf_filename=None):
+    """
+    Public helper to export per-file statistics JSON to the report directory.
+
+    Args:
+        folder_data (dict): Mapping of file_id -> (data_array, stats_dict, filename)
+        output_filename (str, optional): Desired JSON filename.
+        pdf_filename (str, optional): Reference PDF filename for metadata.
+
+    Returns:
+        str or None: Path to the JSON file if written successfully.
+    """
+    if not folder_data:
+        return None
+
+    report_dir = ensure_report_directory()
+
+    if output_filename:
+        json_filename = output_filename
+        if not json_filename.lower().endswith('.json'):
+            json_filename += '.json'
+    else:
+        json_filename = 'warpage_analysis_stats.json'
+
+    json_path = os.path.join(report_dir, json_filename)
+
+    if pdf_filename:
+        reference_pdf = pdf_filename
+        if not reference_pdf.lower().endswith('.pdf'):
+            reference_pdf += '.pdf'
+        reference_pdf_path = os.path.join(report_dir, reference_pdf)
+    else:
+        reference_pdf_path = os.path.join(report_dir, 'warpage_analysis_report.pdf')
+
+    return _export_statistics_json(folder_data, reference_pdf_path, json_output_path=json_path)
 
 
 def export_to_pdf_from_webui_plots(plots_data, folder_data, output_filename='warpage_analysis.pdf', dpi=150):
@@ -385,6 +547,7 @@ def export_to_pdf_from_webui_plots(plots_data, folder_data, output_filename='war
     print(f"Efficient PDF created successfully: {full_output_path}")
     print(f"File size: {os.path.getsize(full_output_path) / (1024*1024):.2f} MB")
     
+    _export_statistics_json(folder_data, full_output_path)
     return full_output_path
 
 
@@ -511,7 +674,7 @@ def export_to_pdf(folder_data, output_filename='warpage_analysis.pdf',
     
     print(f"PDF created successfully: {full_output_path}")
     print(f"File size: {os.path.getsize(full_output_path) / (1024*1024):.2f} MB")
-    
+    _export_statistics_json(folder_data, full_output_path)
     return full_output_path
 
 
@@ -676,7 +839,7 @@ def export_plotly_to_pdf(folder_data, output_filename="warpage_analysis_plotly.p
         
         print(f"Plotly-based PDF created successfully: {full_output_path}")
         print(f"File size: {os.path.getsize(full_output_path) / (1024*1024):.2f} MB")
-        
+        _export_statistics_json(folder_data, full_output_path)
         return full_output_path
         
     except Exception as e:

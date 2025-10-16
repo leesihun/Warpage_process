@@ -53,10 +53,11 @@ def get_previous_day_folder():
 
 def daily_pdf_generator():
     while True:
+        now = datetime.now()
         try:
-            now = datetime.now()
+            now = now - timedelta(days=1)
 
-            if now.hour == 20 and now.minute == 00:
+            if True:
                 # Move the folders in same directory to data folder
                 start_time = time.time()
                 print(f"Starting daily PDF generation at {now.strftime('%Y-%m-%d %H:%M:%S')}")

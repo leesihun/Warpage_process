@@ -8,6 +8,44 @@ import numpy as np
 from functools import lru_cache
 import warnings
 
+try:
+    from scipy import stats as scipy_stats
+except Exception:  # pragma: no cover - scipy should exist, but keep safe fallback
+    scipy_stats = None
+
+
+def _compute_moment_metrics(flat_data, data_mean, data_std):
+    """
+    Compute median, skewness, and kurtosis for finite data.
+
+    Args:
+        flat_data (numpy.ndarray): 1D array of finite values.
+        data_mean (float): Precomputed mean of the data.
+        data_std (float): Precomputed standard deviation of the data.
+
+    Returns:
+        tuple: (median, skewness, kurtosis)
+    """
+    if flat_data.size == 0:
+        return float('nan'), float('nan'), float('nan')
+
+    median_val = float(np.median(flat_data))
+
+    if scipy_stats is not None:
+        skewness_val = float(scipy_stats.skew(flat_data, bias=False))
+        kurtosis_val = float(scipy_stats.kurtosis(flat_data, fisher=True, bias=False))
+    else:
+        if data_std == 0:
+            # Degenerate distribution - zero variance implies zero skew, -3 excess kurtosis
+            skewness_val = 0.0
+            kurtosis_val = -3.0
+        else:
+            normalized = (flat_data - data_mean) / data_std
+            skewness_val = float(np.mean(normalized ** 3))
+            kurtosis_val = float(np.mean(normalized ** 4) - 3.0)
+
+    return median_val, skewness_val, kurtosis_val
+
 
 def calculate_statistics(data_array):
     """
@@ -34,12 +72,16 @@ def calculate_statistics(data_array):
         data_max = np.max(flat_data)
         data_mean = np.mean(flat_data)
         data_std = np.std(flat_data)
+        median_val, skewness_val, kurtosis_val = _compute_moment_metrics(flat_data, data_mean, data_std)
 
         return {
             'min': float(data_min),
             'max': float(data_max),
             'mean': float(data_mean),
+            'median': median_val,
             'std': float(data_std),
+            'skewness': skewness_val,
+            'kurtosis': kurtosis_val,
             'shape': data_array.shape,
             'range': float(data_max - data_min)
         }
@@ -55,22 +97,30 @@ def calculate_statistics(data_array):
                 'min': np.nan,
                 'max': np.nan,
                 'mean': np.nan,
+                'median': np.nan,
                 'std': np.nan,
+                'skewness': np.nan,
+                'kurtosis': np.nan,
                 'shape': data_array.shape,
                 'range': np.nan
             }
 
         # Efficient computation using vectorized operations
-        data_min = np.nanmin(data_array)
-        data_max = np.nanmax(data_array)
-        data_mean = np.nanmean(data_array)
-        data_std = np.nanstd(data_array)
+        finite_data = data_array[finite_mask]
+        data_min = np.nanmin(finite_data)
+        data_max = np.nanmax(finite_data)
+        data_mean = np.nanmean(finite_data)
+        data_std = np.nanstd(finite_data)
+        median_val, skewness_val, kurtosis_val = _compute_moment_metrics(finite_data.ravel(), data_mean, data_std)
 
         return {
             'min': float(data_min),
             'max': float(data_max),
             'mean': float(data_mean),
+            'median': median_val,
             'std': float(data_std),
+            'skewness': skewness_val,
+            'kurtosis': kurtosis_val,
             'shape': data_array.shape,
             'range': float(data_max - data_min)
         }

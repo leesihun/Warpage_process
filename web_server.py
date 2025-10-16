@@ -610,6 +610,48 @@ def export_pdf_report():
     except Exception as e:
         return jsonify({'error': f'PDF export error: {str(e)}'}), 500
 
+
+@app.route('/api/export_stats_json', methods=['GET', 'POST'])
+def export_stats_json_route():
+    """Export per-file statistics as downloadable JSON"""
+    global current_data
+
+    try:
+        if not current_data:
+            return jsonify({'error': 'No analysis data available'}), 400
+
+        json_filename = 'warpage_analysis_stats.json'
+
+        if request.method == 'POST':
+            try:
+                content_type = request.content_type or ''
+                if 'application/json' in content_type:
+                    data = request.get_json(force=False, silent=True) or {}
+                    json_filename = data.get('filename', json_filename)
+            except Exception:
+                pass
+        else:
+            json_filename = request.args.get('filename', json_filename)
+
+        if not json_filename.endswith('.json'):
+            json_filename += '.json'
+
+        import pdf_exporter
+
+        json_path = pdf_exporter.export_statistics_json(current_data, json_filename)
+        if not json_path or not os.path.exists(json_path):
+            return jsonify({'error': 'Failed to generate statistics JSON'}), 500
+
+        return send_file(
+            json_path,
+            as_attachment=True,
+            download_name=os.path.basename(json_path),
+            mimetype='application/json'
+        )
+
+    except Exception as e:
+        return jsonify({'error': f'Stats JSON export error: {str(e)}'}), 500
+
 @app.route('/api/comparison_plot')
 def get_comparison_plot():
     """Get comparison plot - same as stats plot for now"""

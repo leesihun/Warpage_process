@@ -241,6 +241,10 @@
                         <button class="btn btn-outline-primary w-100" onclick="exportPDF()">
                             <i class="fas fa-file-pdf"></i> Export PDF Report
                         </button>
+
+                        <button class="btn btn-outline-secondary w-100 mt-2" onclick="exportStatsJSON()">
+                            <i class="fas fa-file-code"></i> Export Stats JSON
+                        </button>
                         
                         <!-- PDF Export Status -->
                         <div class="mt-3" id="pdfExportStatus" style="display: none;">
@@ -258,6 +262,16 @@
                             <div class="mt-2" id="pdfStatusMessages" style="max-height: 150px; overflow-y: auto; text-align: left; font-size: 0.8em;">
                                 <!-- PDF status messages will appear here -->
                             </div>
+                        </div>
+
+                        <div class="mt-3" id="jsonExportStatus" style="display: none;">
+                            <div class="text-center">
+                                <div class="spinner-border spinner-border-sm text-success" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <small class="text-muted ms-2">Preparing statistics JSON...</small>
+                            </div>
+                            <div class="mt-2 text-muted small" id="jsonStatusMessage"></div>
                         </div>
                     </div>
                 </div>
@@ -1050,7 +1064,23 @@
                     
                     // Add success message to status
                     const statusContainer = document.getElementById('pdfStatusMessages');
-                    statusContainer.innerHTML += '<div class="text-success mb-1">✓ PDF exported successfully!</div>';
+                    statusContainer.innerHTML += '<div class="text-success mb-1">PDF exported successfully!</div>';
+
+                    // Automatically export statistics JSON with matching name
+                    try {
+                        const folderSelect = document.getElementById('folderSelect');
+                        const folderValue = folderSelect ? folderSelect.value.trim() : '';
+                        const baseName = filename.replace(/\.pdf$/i, '') || 'warpage_analysis';
+                        const defaultJsonName = folderValue ? `${folderValue}_stats.json` : `${baseName}_stats.json`;
+                        const jsonResult = await requestAndDownloadStatsJSON(defaultJsonName, { silent: true });
+                        if (jsonResult && jsonResult.filename) {
+                            statusContainer.innerHTML += `<div class="text-success mb-1">Statistics JSON downloaded: ${jsonResult.filename}</div>`;
+                        }
+                    } catch (jsonError) {
+                        console.error('Auto JSON export error:', jsonError);
+                        statusContainer.innerHTML += `<div class="text-warning mb-1">Statistics JSON export failed: ${jsonError.message || jsonError}</div>`;
+                        showAlert('Statistics JSON export failed: ' + (jsonError.message || jsonError), 'warning');
+                    }
                     
                     showAlert('PDF exported successfully!', 'success');
                     
@@ -1061,15 +1091,104 @@
                 } else {
                     const data = await response.json();
                     document.getElementById('pdfProgressText').textContent = 'PDF export failed';
-                    document.getElementById('pdfStatusMessages').innerHTML += `<div class="text-danger mb-1">✗ ${data.error || 'PDF export failed'}</div>`;
+                    document.getElementById('pdfStatusMessages').innerHTML += `<div class="text-danger mb-1">??${data.error || 'PDF export failed'}</div>`;
                     showAlert(data.error || 'PDF export failed', 'danger');
                 }
             } catch (error) {
                 console.error('PDF export error:', error);
                 document.getElementById('pdfProgressText').textContent = 'PDF export failed';
-                document.getElementById('pdfStatusMessages').innerHTML += `<div class="text-danger mb-1">✗ PDF export failed: ${error.message}</div>`;
+                document.getElementById('pdfStatusMessages').innerHTML += `<div class="text-danger mb-1">??PDF export failed: ${error.message}</div>`;
                 showAlert('PDF export failed: ' + error.message, 'danger');
             }
+        }
+        async function requestAndDownloadStatsJSON(desiredName, options = {}) {
+            const { silent = false } = options;
+            const statusContainer = document.getElementById('jsonExportStatus');
+            const statusMessage = document.getElementById('jsonStatusMessage');
+
+            if (!silent && statusContainer) {
+                statusContainer.style.display = 'block';
+            }
+            if (!silent && statusMessage) {
+                statusMessage.textContent = 'Preparing statistics JSON...';
+            }
+
+            try {
+                const response = await fetch(`/api/export_stats_json?filename=${encodeURIComponent(desiredName)}`);
+
+                if (!response.ok) {
+                    const data = await response.json().catch(() => ({}));
+                    const errorMessage = data.error || 'Statistics JSON export failed';
+                    if (!silent && statusMessage) {
+                        statusMessage.textContent = errorMessage;
+                    }
+                    if (!silent) {
+                        showAlert(errorMessage, 'danger');
+                    }
+                    throw new Error(errorMessage);
+                }
+
+                const blob = await response.blob();
+                let filename = desiredName || 'warpage_analysis_stats.json';
+                const contentDisposition = response.headers.get('content-disposition');
+
+                if (contentDisposition) {
+                    const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+                    if (filenameMatch && filenameMatch[1]) {
+                        filename = filenameMatch[1].replace(/['"]/g, '');
+                    }
+                }
+
+                if (!filename.toLowerCase().endsWith('.json')) {
+                    filename += '.json';
+                }
+
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+
+                if (!silent && statusMessage) {
+                    statusMessage.textContent = 'Statistics JSON exported successfully!';
+                }
+                if (!silent) {
+                    showAlert('Statistics JSON exported successfully!', 'success');
+                }
+
+                if (!silent && statusContainer) {
+                    setTimeout(() => {
+                        statusContainer.style.display = 'none';
+                    }, 3000);
+                }
+
+                return { filename };
+            } catch (error) {
+                console.error('Statistics JSON export error:', error);
+                if (!silent && statusMessage) {
+                    statusMessage.textContent = `Statistics JSON export failed: ${error.message}`;
+                }
+                if (!silent) {
+                    showAlert('Statistics JSON export failed: ' + error.message, 'danger');
+                }
+                throw error;
+            } finally {
+                if (silent && statusContainer) {
+                    statusContainer.style.display = 'none';
+                }
+            }
+        }
+
+
+
+        async function exportStatsJSON() {
+            const folderSelect = document.getElementById('folderSelect');
+            const folderValue = folderSelect ? folderSelect.value.trim() : '';
+            const suggestedName = folderValue ? `${folderValue}_stats.json` : 'warpage_analysis_stats.json';
+            await requestAndDownloadStatsJSON(suggestedName, { silent: false });
         }
 
 
