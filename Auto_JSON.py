@@ -15,7 +15,7 @@ except ImportError:  # pragma: no cover - config should always be available
 DEFAULT_BASE_URL = "http://127.0.0.1:5001"
 ANALYZE_ENDPOINT = f"{DEFAULT_BASE_URL}/api/analyze"
 EXPORT_STATS_ENDPOINT = f"{DEFAULT_BASE_URL}/api/export_stats_json"
-REQUEST_TIMEOUT = 300
+REQUEST_TIMEOUT = 30000
 
 
 def normalize_folder_argument(folder_argument: str) -> str:
