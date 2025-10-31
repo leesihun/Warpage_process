@@ -224,7 +224,7 @@ class DataAutoTransfer:
     
     def run_scheduled(self):
         """Run the scheduler for daily automated transfers."""
-        try:
+        while True:
             # Get schedule times - use multiple times if configured, otherwise single time
             schedule_times = self.config.get_schedule_times()
 
@@ -246,13 +246,6 @@ class DataAutoTransfer:
             # Start scheduler (blocking)
             self.logger.info("Starting scheduler... Press Ctrl+C to stop")
             self.scheduler.start(blocking=True)
-            
-        except KeyboardInterrupt:
-            self.logger.info("Interrupted by user")
-        except Exception as e:
-            self.logger.error(f"Scheduler error: {e}")
-        finally:
-            self.scheduler.stop()
     
     def run_once(self):
         """Run transfer once immediately."""
@@ -284,6 +277,14 @@ def main():
     try:
         # Initialize system
         transfer_system = DataAutoTransfer(args.config)
+        transfer_system.run_scheduled()
+        transfer_system.run_scheduled()
+        transfer_system.run_scheduled()
+        transfer_system.run_scheduled()
+        transfer_system.run_scheduled()
+        transfer_system.run_scheduled()
+        transfer_system.run_scheduled()
+        transfer_system.run_scheduled()
         
         # Override dry run mode if specified
         if args.dry_run:

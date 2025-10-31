@@ -25,12 +25,3 @@ RETRY_ATTEMPTS=3
 RETRY_DELAY=30
 DELETE_AFTER_TRANSFER=false
 LOG_LEVEL=INFO
-
-# Protocol Options:
-# - ssh: Use SSH/SFTP via paramiko (recommended - no system SSH required)
-# - scp: Use SSH/SFTP via paramiko (alias for ssh)
-# - smb: Use SMB/CIFS with automatic connection cleanup
-# - local: Copy to local directory
-#
-# Note: SSH protocol uses paramiko library and doesn't require system SSH installation
-# For network requirements: SSH uses port 22, SMB uses ports 445/139
