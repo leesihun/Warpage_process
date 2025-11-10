@@ -9,7 +9,10 @@
       "Bash(curl -s \"https://raw.githubusercontent.com/leesihun/Warpage_process/main/data_autotransfer/transfer_manager.py\")",
       "Bash(curl:*)",
       "Bash(del DataAutoTransfer_Simple.py)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(...venv312Scriptspython.exe -m PyInstaller data_autotransfer.spec --clean)",
+      "Bash(python -m PyInstaller:*)",
+      "Bash(copy config.txt \"dist\\config.txt\")"
     ],
     "deny": [],
     "ask": []

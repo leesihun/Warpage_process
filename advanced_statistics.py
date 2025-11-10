@@ -265,9 +265,10 @@ def create_contour_plots(folder_data, figsize=(11.69, 8.27)):
             x = np.arange(cols)
             y = np.arange(rows)
             X, Y = np.meshgrid(x, y)
-            
-            contour = ax.contour(X, Y, data, levels=15, colors='black', alpha=0.6, linewidths=0.8)
-            contourf = ax.contourf(X, Y, data, levels=15, cmap='viridis', alpha=0.8)
+
+            # Use np.flipud to match imshow orientation (origin at top-left)
+            contour = ax.contour(X, Y, np.flipud(data), levels=15, colors='black', alpha=0.6, linewidths=0.8)
+            contourf = ax.contourf(X, Y, np.flipud(data), levels=15, cmap='viridis', alpha=0.8)
             
             ax.set_title(f'{file_id.replace("File_", "")} - Contour\n{filename}', 
                         fontsize=10, fontweight='bold')
