@@ -13,10 +13,72 @@ import io
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import multiprocessing
 from scipy import ndimage
+import re
 
 # Lazy import for optional dependencies
 _plotly_available = None
 _plotly_modules = None
+
+
+def parse_filename_info(filename):
+    """
+    Parse filename to extract barcode and manufacturer information.
+
+    Filename format: YYYYMMDDHHMMSS@BARCODE@MODEL_M_RF_REV0.7 TOP
+
+    Barcode prefixes mapping:
+    - A: DAP
+    - K: KCC
+    - C or Q: COMPEQ
+    - G: MEIKO
+    - F: AT&S
+    - T: TRIPOD
+    - E: E&E
+    - B: FPE
+
+    Args:
+        filename (str): Original filename
+
+    Returns:
+        dict: Dictionary with 'barcode', 'manufacturer', and 'model' keys
+    """
+    info = {
+        'barcode': None,
+        'manufacturer': None,
+        'model': None
+    }
+
+    # Manufacturer mapping
+    manufacturer_map = {
+        'A': 'DAP',
+        'K': 'KCC',
+        'C': 'COMPEQ',
+        'Q': 'COMPEQ',
+        'G': 'MEIKO',
+        'F': 'AT&S',
+        'T': 'TRIPOD',
+        'E': 'E&E',
+        'B': 'FPE'
+    }
+
+    # Try to parse filename parts separated by @
+    parts = filename.split('@')
+
+    if len(parts) >= 2:
+        # Extract barcode (second part after first @)
+        info['barcode'] = parts[1].strip()
+
+        # Determine manufacturer from first letter of barcode
+        if info['barcode']:
+            first_letter = info['barcode'][0].upper()
+            info['manufacturer'] = manufacturer_map.get(first_letter, 'Unknown')
+
+    if len(parts) >= 3:
+        # Extract model (third part and anything after)
+        info['model'] = '@'.join(parts[2:]).strip()
+
+    return info
+
 
 def _import_plotly():
     """Lazy import of Plotly modules to improve startup time."""
@@ -338,9 +400,22 @@ def create_comparison_plot(folder_data, figsize=(11.69, 8.27), vmin=None, vmax=N
                 im = ax.imshow(data_for_plot, cmap=cmap, vmin=vmin, vmax=vmax, aspect='auto', interpolation=interpolation)
                 images.append(im)
 
-                # Minimal text formatting
+                # Minimal text formatting with parsed filename information
                 simple_file_id = file_id.replace('File_', '')
-                ax.set_title(f'{simple_file_id}\n{filename}', fontsize=7, fontweight='bold')
+
+                # Parse filename to extract barcode and manufacturer
+                parsed_info = parse_filename_info(filename)
+
+                # Build title with compact information
+                title_parts = [simple_file_id]
+                if parsed_info['barcode']:
+                    title_parts.append(f"[{parsed_info['barcode']}]")
+                if parsed_info['manufacturer']:
+                    title_parts.append(f"{parsed_info['manufacturer']}")
+
+                title = ' '.join(title_parts)
+
+                ax.set_title(title, fontsize=7, fontweight='bold')
                 ax.axis('off')  # Faster than individual tick removal
 
                 # Reduced statistics for speed
@@ -436,9 +511,24 @@ def create_individual_plot(file_id, data, stats, filename, figsize=(8.27, 11.69)
     interpolation = 'bilinear' if optimize_for_pdf else 'nearest'
     im = ax.imshow(data_for_plot, cmap=cmap, vmin=vmin, vmax=vmax, aspect='equal', interpolation=interpolation)
 
-    # Simplified styling
+    # Simplified styling with parsed filename information
     simple_file_id = file_id.replace('File_', '')
-    ax.set_title(f'{simple_file_id} - {filename}', fontweight='bold', fontsize=11)
+
+    # Parse filename to extract barcode and manufacturer
+    parsed_info = parse_filename_info(filename)
+
+    # Build title with extracted information
+    title_parts = [f'{simple_file_id}']
+    if parsed_info['barcode']:
+        title_parts.append(f"Barcode: {parsed_info['barcode']}")
+    if parsed_info['manufacturer']:
+        title_parts.append(f"Mfr: {parsed_info['manufacturer']}")
+
+    title = ' | '.join(title_parts)
+    if parsed_info['model']:
+        title += f"\n{parsed_info['model']}"
+
+    ax.set_title(title, fontweight='bold', fontsize=11)
 
     # Set axis labels for proper orientation
     ax.set_xlabel('X Position (pixels)', fontsize=9)
@@ -523,7 +613,8 @@ def create_3d_surface_plot(folder_data, figsize=(11.69, 8.27), optimize_for_pdf=
                 X, Y = np.meshgrid(x, y)
 
                 # Highly optimized surface plot
-                surf = ax.plot_surface(X, Y, data_sampled, cmap='viridis', alpha=0.7,
+                # Flip data vertically to match imshow orientation (origin at top-left)
+                surf = ax.plot_surface(X, Y, np.flipud(data_sampled), cmap='viridis', alpha=0.7,
                                      rcount=min(30, rows), ccount=min(30, cols),  # Lower resolution
                                      linewidth=0, antialiased=False)  # Disable anti-aliasing for speed
 

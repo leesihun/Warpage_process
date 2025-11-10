@@ -3,19 +3,21 @@ import time
 import os
 from datetime import datetime, timedelta
 
+timeout = 30000000
+
 def generate_pdf(folder_name):
     try:
         analyze_response = requests.post(
             "http://127.0.0.1:5001/api/analyze",
             json={"folder": folder_name},
-            timeout=300
+            timeout=timeout
         )
 
         if analyze_response.status_code != 200:
             print(f"Analysis failed for {folder_name}. Status code: {analyze_response.status_code}")
             return False
 
-        pdf_response = requests.get("http://127.0.0.1:5001/api/export_pdf", timeout=300)
+        pdf_response = requests.get("http://127.0.0.1:5001/api/export_pdf", timeout=timeout)
 
         if pdf_response.status_code != 200:
             print(f"Failed to generate PDF for {folder_name}. Status code: {pdf_response.status_code}")
@@ -30,7 +32,7 @@ def generate_pdf(folder_name):
         json_response = requests.get(
             "http://127.0.0.1:5001/api/export_stats_json",
             params={"filename": stats_filename},
-            timeout=300
+            timeout=timeout
         )
 
         if json_response.status_code != 200:
