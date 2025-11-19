@@ -12,7 +12,14 @@
       "Bash(rm:*)",
       "Bash(...venv312Scriptspython.exe -m PyInstaller data_autotransfer.spec --clean)",
       "Bash(python -m PyInstaller:*)",
-      "Bash(copy config.txt \"dist\\config.txt\")"
+      "Bash(copy config.txt \"dist\\config.txt\")",
+      "Bash(\".venv312\\Scripts\\python.exe\" -m PyInstaller PEMTRON_Warpage_Tool.spec --clean)",
+      "Bash(tasklist)",
+      "Bash(taskkill:*)",
+      "Bash(findstr:*)",
+      "Bash(netstat:*)",
+      "Bash(start /B python:*)",
+      "Bash(python:*)"
     ],
     "deny": [],
     "ask": []

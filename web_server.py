@@ -304,29 +304,101 @@ def analyze():
         data = request.get_json()
         folder = data.get('folder')
         file_type = data.get('file_type', 'original')
-        row_fraction = float(data.get('row_fraction', 1.0))
-        col_fraction = float(data.get('col_fraction', 1.0))
+
+        # Support both new margin system and legacy row/col fraction system
+        # New system: independent margins (left, right, top, bottom)
+        margin_left = data.get('margin_left')
+        margin_right = data.get('margin_right')
+        margin_top = data.get('margin_top')
+        margin_bottom = data.get('margin_bottom')
+
+        # Legacy system: centered fractions
+        row_fraction = data.get('row_fraction')
+        col_fraction = data.get('col_fraction')
+
+        # Determine which system to use and convert if needed
+        use_margin_system = any(m is not None for m in [margin_left, margin_right, margin_top, margin_bottom])
+
+        if use_margin_system:
+            # New margin system takes precedence
+            from data_loader import convert_fraction_to_margins
+            margin_left = float(margin_left) if margin_left is not None else 0.0
+            margin_right = float(margin_right) if margin_right is not None else 0.0
+            margin_top = float(margin_top) if margin_top is not None else 0.0
+            margin_bottom = float(margin_bottom) if margin_bottom is not None else 0.0
+
+            # For backward compatibility, also set row_fraction and col_fraction for summary display
+            # (These won't be used for processing, but may be needed for display)
+            effective_row_fraction = 1.0 - (margin_top + margin_bottom)
+            effective_col_fraction = 1.0 - (margin_left + margin_right)
+        else:
+            # Legacy row/col fraction system - convert to margins
+            from data_loader import convert_fraction_to_margins
+            row_fraction = float(row_fraction) if row_fraction is not None else 1.0
+            col_fraction = float(col_fraction) if col_fraction is not None else 1.0
+
+            margins = convert_fraction_to_margins(row_fraction, col_fraction)
+            margin_left = margins['left_margin']
+            margin_right = margins['right_margin']
+            margin_top = margins['top_margin']
+            margin_bottom = margins['bottom_margin']
+
+            effective_row_fraction = row_fraction
+            effective_col_fraction = col_fraction
+
         vmin = data.get('vmin')
         vmax = data.get('vmax')
 
         if not folder:
             return jsonify({'error': 'No folder selected'}), 400
 
-        # File type is now passed directly instead of use_original boolean
-
         # Get performance settings from request
         downsample_factor = int(data.get('downsample_factor', 1))
         parallel_processing = data.get('parallel_processing', True)
         fast_plots = data.get('fast_plots', True)
 
-        # Load data with parallel processing and downsampling
+        # Load data with parallel processing and downsampling using new margin system
+        from data_loader import _process_single_file_with_margins, find_data_files
+        from concurrent.futures import ProcessPoolExecutor, as_completed
+        import multiprocessing
+
         data_dir = get_data_dir()
+        folder_path = os.path.join(data_dir, folder)
+        file_paths = find_data_files(folder_path, file_type)
+
+        if not file_paths:
+            return jsonify({'error': f'No data files found in folder: {folder}'}), 400
+
+        # Process files with new margin system
         if parallel_processing:
-            folder_results = process_folder_data_parallel(
-                data_dir, folder, row_fraction, col_fraction, file_type, downsample_factor
-            )
+            max_workers = min(len(file_paths), multiprocessing.cpu_count(), 61)
+            folder_results = []
+
+            with ProcessPoolExecutor(max_workers=max_workers) as executor:
+                future_to_path = {
+                    executor.submit(_process_single_file_with_margins, path,
+                                  margin_left, margin_right, margin_top, margin_bottom,
+                                  downsample_factor): path
+                    for path in file_paths
+                }
+
+                for future in as_completed(future_to_path):
+                    result = future.result()
+                    if result is not None:
+                        folder_results.append(result)
+
+            # Sort by filename for consistency
+            folder_results.sort(key=lambda x: x[2])
         else:
-            folder_results = process_folder_data(data_dir, folder, row_fraction, col_fraction, file_type, downsample_factor)
+            # Sequential processing
+            folder_results = []
+            for file_path in file_paths:
+                result = _process_single_file_with_margins(
+                    file_path, margin_left, margin_right, margin_top, margin_bottom, downsample_factor
+                )
+                if result is not None:
+                    folder_results.append(result)
+            folder_results.sort(key=lambda x: x[2])
 
         if not folder_results:
             return jsonify({'error': f'No data found in folder: {folder}'}), 400
@@ -432,6 +504,17 @@ def analyze():
         file_list = [filename for _, _, filename in current_data.values()]
         total_data_points = sum(data_array.size for data_array, _, _ in current_data.values() if data_array is not None)
 
+        # Create margin/fraction summary for display
+        margin_info = {
+            'left_margin': margin_left,
+            'right_margin': margin_right,
+            'top_margin': margin_top,
+            'bottom_margin': margin_bottom,
+            'row_fraction': effective_row_fraction,
+            'col_fraction': effective_col_fraction,
+            'using_margin_system': use_margin_system
+        }
+
         return jsonify({
             'success': True,
             'summary': {
@@ -442,7 +525,8 @@ def analyze():
                 'total_data_points': total_data_points,
                 'downsample_factor': downsample_factor,
                 'parallel_processing': parallel_processing,
-                'processing_time_optimized': True
+                'processing_time_optimized': True,
+                'margins': margin_info
             }
         })
 

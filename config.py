@@ -96,8 +96,15 @@ DEFAULT_CONFIG = {
     "colorbar": True,                          # 색상 막대 표시 여부 / Whether to show colorbar in plots
     
     # === Data Processing Settings ===
-    "row_fraction": 1,                         # 중앙에서 유지할 행 비율 / Fraction of rows to keep in center (1.0 = keep all)
-    "col_fraction": 1,                         # 중앙에서 유지할 열 비율 / Fraction of columns to keep in center (1.0 = keep all)
+    # New margin system (preferred) - allows independent control of each side
+    "margin_left": 0,                          # 왼쪽 여백 비율 (0.0-0.9) / Left margin fraction (0.0-0.9, 0 = no cropping)
+    "margin_right": 0,                         # 오른쪽 여백 비율 (0.0-0.9) / Right margin fraction (0.0-0.9, 0 = no cropping)
+    "margin_top": 0,                           # 위쪽 여백 비율 (0.0-0.9) / Top margin fraction (0.0-0.9, 0 = no cropping)
+    "margin_bottom": 0,                        # 아래쪽 여백 비율 (0.0-0.9) / Bottom margin fraction (0.0-0.9, 0 = no cropping)
+
+    # Legacy centered cropping (deprecated, but still supported for backward compatibility)
+    "row_fraction": 1,                         # 중앙에서 유지할 행 비율 (레거시) / Fraction of rows to keep in center (legacy, 1.0 = keep all)
+    "col_fraction": 1,                         # 중앙에서 유지할 열 비율 (레거시) / Fraction of columns to keep in center (legacy, 1.0 = keep all)
     
     # === Output Settings ===
     "output_filename": "warpage_analysis.pdf", # 출력 PDF 파일명 / Output PDF filename

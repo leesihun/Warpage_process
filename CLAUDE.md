@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 PEMTRON Warpage Analysis Tool: A Python-based application for analyzing semiconductor warpage measurement data with web-based GUI and automated data transfer capabilities.
 
-**Two Main Components:**
+**Three Main Components:**
 1. **Web-based Analysis Tool** ([web_server.py](web_server.py)) - Interactive warpage data visualization and PDF report generation
 2. **Data Auto Transfer** ([data_autotransfer/](data_autotransfer/)) - Automated daily transfer of dated folders to remote systems
 3. **Auto PDF Generator** ([Auto_PDF.py](Auto_PDF.py)) - Scheduled PDF generation at 20:00 daily for previous day's data
@@ -23,7 +23,10 @@ Server starts on `http://localhost:5001` with auto-open browser (configurable po
 
 **Web Server (Production Executable):**
 ```bash
-# Build executable
+# Build executable using spec file
+python -m PyInstaller PEMTRON_Warpage_Tool.spec --clean
+
+# Or build with command line
 python -m PyInstaller --onefile --name "PEMTRON_Warpage_Tool" web_server.py --clean
 
 # Run from dist folder
@@ -50,9 +53,17 @@ python main.py --config custom_config.txt
 
 **Auto PDF Generator:**
 ```bash
+# Development
 python Auto_PDF.py
+
+# Build executable
+python -m PyInstaller Auto_PDF.spec --clean
+
+# Run executable
+cd dist
+Auto_PDF.exe
 ```
-Runs as background service, generates PDF daily at 20:00 for previous day's folder.
+Runs as background service, generates PDF daily at 20:00 for previous day's folder. Connects to web server at `http://127.0.0.1:5001`.
 
 ### Development Setup
 
@@ -66,19 +77,34 @@ source .venv312/bin/activate  # Linux/Mac
 
 # Install dependencies
 pip install -r requirements.txt
+
+# For data transfer component
+cd data_autotransfer
+pip install -r requirements.txt
 ```
 
 ### Building Executables
 
 **Web Server:**
 ```bash
-python -m PyInstaller --onefile --name "PEMTRON_Warpage_Tool" web_server.py --clean
+python -m PyInstaller PEMTRON_Warpage_Tool.spec --clean
 ```
 
-**Data Transfer:**
+**Auto PDF Generator:**
+```bash
+python -m PyInstaller Auto_PDF.spec --clean
+```
+
+**Data Transfer (Standard):**
 ```bash
 cd data_autotransfer
 python -m PyInstaller data_autotransfer.spec --clean
+```
+
+**Data Transfer (Stealth - No Console):**
+```bash
+cd data_autotransfer
+python -m PyInstaller data_autotransfer_stealth.spec --clean
 ```
 
 Note: Executables are large (~800MB for web server) due to bundled dependencies.
@@ -111,10 +137,26 @@ Scheduler (cron-like) → DateUtils.find_yesterday_folder() → TransferManager
                                           Optional: Delete source after transfer
 ```
 
+### Data Flow - Auto PDF Generation
+
+```
+Daily at 20:00 → Find previous day folder (YYYYMMDD format)
+                              ↓
+                 Move folder to data/ directory (if needed)
+                              ↓
+                 HTTP POST to web server (/api/analyze)
+                              ↓
+                 HTTP GET for PDF export (/api/export_pdf)
+                              ↓
+                 HTTP GET for JSON stats (/api/export_stats_json)
+                              ↓
+                 Save files to data/{folder_name}/ directory
+```
+
 ### Core Modules
 
 **Web Analysis Tool:**
-- [web_server.py](web_server.py) - Flask REST API, global state management
+- [web_server.py](web_server.py) - Flask REST API, global state management, parallel directory scanning
 - [data_loader.py](data_loader.py) - File discovery, parallel loading with ProcessPoolExecutor
 - [visualization.py](visualization.py) - Plot generation (2D heatmaps, 3D surfaces, statistical charts)
 - [pdf_exporter.py](pdf_exporter.py) - PDF report generation with ReportLab
@@ -123,12 +165,15 @@ Scheduler (cron-like) → DateUtils.find_yesterday_folder() → TransferManager
 - [config.py](config.py) - Configuration management, default settings
 
 **Data Transfer System:**
-- [data_autotransfer/main.py](data_autotransfer/main.py) - Main orchestrator
+- [data_autotransfer/main.py](data_autotransfer/main.py) - Main orchestrator, CLI argument parsing
 - [data_autotransfer/transfer_manager.py](data_autotransfer/transfer_manager.py) - Protocol handlers (SSH/SMB/local)
 - [data_autotransfer/scheduler.py](data_autotransfer/scheduler.py) - Cron-like scheduling
 - [data_autotransfer/config_parser.py](data_autotransfer/config_parser.py) - Config file parsing
 - [data_autotransfer/date_utils.py](data_autotransfer/date_utils.py) - Date-based folder operations
 - [data_autotransfer/logger.py](data_autotransfer/logger.py) - Structured logging
+
+**Auto PDF Service:**
+- [Auto_PDF.py](Auto_PDF.py) - Scheduled PDF generation, folder management, HTTP client for web server API
 
 ## Important Technical Details
 
@@ -145,14 +190,21 @@ Scheduler (cron-like) → DateUtils.find_yesterday_folder() → TransferManager
 - Figures closed immediately after base64 conversion
 - Global state cleared before new analysis
 
+**Directory Scanning Optimization:**
+- Parallel directory scanning with `ThreadPoolExecutor` (configurable max threads: 64)
+- Result caching with TTL (default: 300 seconds)
+- Early exit optimization (stops on first data file found)
+- Single-pass directory traversal with combined pattern matching
+- Configurable scan depth limit (default: 2 levels)
+
 ### File Format Support
 
 **Priority System (configurable in UI):**
 1. **Original files** (default): `*@_ORI.txt`, `*_ORI_A.txt` - Raw measurement data
 2. **Corrected files**: `*.txt` (excluding original patterns) - Processed data
-3. **Akrometrix format**: Special format with different parsing rules
+3. **Akrometrix format**: `.dat`, `.DAT` - Special format with different parsing rules
 
-File discovery is recursive with configurable depth (default: 3 levels).
+File discovery is recursive with configurable depth (default: 3 levels for data loading, 2 for scanning).
 
 ### Configuration System
 
@@ -164,16 +216,23 @@ DEFAULT_CONFIG = {
     "cmap": "jet",                      # Colormap
     "row_fraction": 1, "col_fraction": 1,  # Region extraction
     "use_original_files": True,         # File type preference
-    "dpi": 150,                         # Export quality
+    "dpi": 500,                         # Export quality (500 for production)
     "parallel_processing": True,        # Enable multiprocessing
     "max_workers": None                 # Auto-detect CPU cores
 }
 
 SCAN_CONFIG = {
-    "max_directories": 100,             # Limit folder scan
-    "max_scan_depth": 3,                # Recursive depth
-    "max_scan_threads": 61,             # Parallel directory scanning
-    "cache_ttl_seconds": 300            # Directory scan cache
+    "max_directories": 5000,            # Limit folder scan
+    "max_scan_depth": 2,                # Recursive depth for scanning
+    "max_scan_threads": 64,             # Parallel directory scanning
+    "cache_ttl_seconds": 300,           # Directory scan cache
+    "per_directory_timeout": 5          # Timeout per directory (seconds)
+}
+
+BATCH_CONFIG = {
+    "parallel_workers": 16,             # CPU cores for parallel processing
+    "max_files": 1000,                  # Max files per batch
+    "max_file_size_mb": 500             # Max file size (MB)
 }
 ```
 
@@ -190,6 +249,7 @@ PASSWORD=primary_password
 PASSWORD_FALLBACKS=fallback1, fallback2  # Comma-separated
 DELETE_AFTER_TRANSFER=false
 RETRY_ATTEMPTS=3
+RETRY_DELAY=30                         # Delay between retries (seconds)
 ```
 
 ### PyInstaller Considerations
@@ -207,11 +267,30 @@ if __name__ == '__main__':
 def get_data_dir():
     """Auto-detects correct path for .exe vs .py"""
     if getattr(sys, 'frozen', False):
+        # Running as PyInstaller executable
         base_path = os.path.dirname(sys.executable)
     else:
+        # Running in development
         base_path = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base_path, 'data')
 ```
+
+**Resource Path for Templates:**
+```python
+def get_resource_path(relative_path):
+    """Get path for bundled resources"""
+    if hasattr(sys, '_MEIPASS'):
+        # PyInstaller temp directory
+        return os.path.join(sys._MEIPASS, relative_path)
+    else:
+        # Development directory
+        return os.path.join(os.path.dirname(__file__), relative_path)
+```
+
+**Spec File Requirements:**
+- Web server spec must include `datas=[('templates', 'templates')]` for Flask templates
+- Data transfer spec uses `collect_all()` for paramiko, smbprotocol, and schedule
+- Console mode should be True for debugging, False for production stealth mode
 
 ### API Endpoints (Web Server)
 
@@ -222,6 +301,18 @@ def get_data_dir():
 4. `GET /api/all_plots` - Get all plots in single response
 5. `GET /api/export_pdf` - Generate and download PDF report
 6. `GET /api/export_stats_json` - Export statistics as JSON
+
+**Statistical Analysis Endpoints:**
+- `GET /api/mean_plot` - Mean comparison across files
+- `GET /api/range_plot` - Range analysis
+- `GET /api/minmax_plot` - Min/max comparison
+- `GET /api/std_plot` - Standard deviation analysis
+- `GET /api/distribution_plot` - Warpage distribution
+- `GET /api/advanced_analysis` - Comprehensive advanced statistics
+
+**Utility Endpoints:**
+- `GET /api/status` - Server health check
+- `GET /api/debug` - Diagnostic information
 
 See [README.md](README.md) for complete API documentation.
 
@@ -236,6 +327,11 @@ Center region extraction using `row_fraction` and `col_fraction` (0.0-1.0)
 **Statistical Calculations:**
 - Basic: min, max, mean, std, range
 - Advanced: skewness, kurtosis, distribution analysis
+
+**Data Optimization:**
+- Optional downsampling for faster processing (configurable factor: 1, 2, 4)
+- Streaming data loading for memory efficiency
+- Data resizing optimization for PDF generation
 
 ### Parallel Processing Architecture
 
@@ -259,6 +355,15 @@ with ProcessPoolExecutor(max_workers=max_workers) as executor:
     results = list(executor.map(worker_function, tasks))
 ```
 
+**Thread Pool for I/O Operations:**
+```python
+from concurrent.futures import ThreadPoolExecutor
+
+# Use threads for directory scanning (I/O bound)
+with ThreadPoolExecutor(max_workers=64) as executor:
+    results = list(executor.map(scan_function, directories))
+```
+
 ### Error Handling Strategy
 
 **Graceful Degradation:**
@@ -270,6 +375,7 @@ with ProcessPoolExecutor(max_workers=max_workers) as executor:
 - Configurable retry attempts (default: 3)
 - Configurable retry delay (default: 30s)
 - Password fallback mechanism for authentication failures
+- Per-directory timeout for scanning (default: 5s)
 
 ## Important Conventions
 
@@ -278,14 +384,16 @@ with ProcessPoolExecutor(max_workers=max_workers) as executor:
 - `templates/` contains Flask HTML templates
 - `report/` for generated PDF outputs (auto-created)
 - PyInstaller builds go to `dist/` directory
+- Each component has its own `dist/` subdirectory for executables
 
 ### Naming Conventions
 - File discovery uses pattern matching, not extension-only
 - Date folders follow `%Y%m%d` format (e.g., `20250110`)
 - Generated files: `{folder_name}.pdf`, `{folder_name}_stats.json`
+- Measurement files: `*@_ORI.txt`, `*_ORI_A.txt` (original), `*.txt` (corrected)
 
 ### State Management
-Global variables in web_server.py:
+Global variables in [web_server.py](web_server.py):
 - `current_data` - Processed measurement arrays and stats
 - `current_plots` - Generated plot images (base64 encoded)
 - `current_stats` - Statistical results
@@ -299,6 +407,12 @@ import matplotlib
 matplotlib.use('Agg')  # Non-interactive backend
 ```
 
+### Figure Size Conventions
+Use unified landscape figsize for consistency across all plots:
+```python
+landscape_figsize = (11.69, 8.27)  # A4 landscape dimensions
+```
+
 ## Common Issues
 
 ### "More than 20 figures" Warning
@@ -306,15 +420,34 @@ matplotlib.use('Agg')  # Non-interactive backend
 
 ### Unicode Encoding Errors (Windows)
 **Solution:** Avoid Unicode symbols in print statements (✓, ✗). Use ASCII alternatives.
+**Root Cause:** Windows console uses cp949 codec by default, which doesn't support Unicode characters.
 
 ### PyInstaller "Module not found"
 **Solution:** Add hidden imports to spec file or use `--hidden-import` flag.
+**Common missing modules:** paramiko, smbprotocol, schedule, matplotlib backends
 
 ### Slow Folder Scanning
-**Solution:** Adjust `SCAN_CONFIG` in [config.py](config.py) - reduce `max_directories` or `max_scan_depth`.
+**Solution:** Adjust `SCAN_CONFIG` in [config.py](config.py):
+- Reduce `max_directories` (default: 5000)
+- Reduce `max_scan_depth` (default: 2)
+- Increase `max_scan_threads` for faster parallel scanning (default: 64)
 
 ### Transfer Authentication Failures
 **Solution:** Use `PASSWORD_FALLBACKS` in config for multiple password attempts.
+
+### Server Won't Start or 500 Errors
+**Common causes:**
+1. Running from wrong directory (must be project root)
+2. `templates/` directory not found
+3. `data/` directory doesn't exist
+**Solution:** Ensure correct working directory and required folders exist.
+
+### Auto PDF Service Connection Failed
+**Symptom:** Cannot connect to http://127.0.0.1:5001
+**Solution:**
+1. Ensure web server is running first
+2. Check port 5001 is not in use by another application
+3. Verify WEB_PORT setting in [config.py](config.py)
 
 ## Port Configuration
 
@@ -330,3 +463,62 @@ Major changes in recent versions:
 - v2.1.1: Critical fixes for server errors and Unicode encoding
 - v2.1.0: Multiprocessing pipeline for 3-5x performance improvement
 - v2.0.x: Web interface and advanced analysis features
+
+## Development Workflow
+
+### Testing Changes
+```bash
+# Test web server
+python web_server.py
+# Browser opens to http://localhost:5001
+
+# Test data transfer
+cd data_autotransfer
+python main.py --test
+
+# Test Auto PDF (requires web server running)
+python Auto_PDF.py
+```
+
+### Building for Distribution
+```bash
+# Build all components
+python -m PyInstaller PEMTRON_Warpage_Tool.spec --clean
+python -m PyInstaller Auto_PDF.spec --clean
+cd data_autotransfer
+python -m PyInstaller data_autotransfer.spec --clean
+```
+
+### Deployment Checklist
+1. Ensure `data/` folder exists next to executable
+2. Copy `templates/` folder for web server executable
+3. Copy `config.txt` for data transfer executable
+4. Test all executables before distribution
+5. Verify multiprocessing works in frozen executable
+
+## Performance Tuning
+
+### For Maximum Speed (Web Analysis)
+```python
+# In analyze request
+{
+    "downsample_factor": 4,         # Quarter resolution
+    "parallel_processing": True,    # Use all CPU cores
+    "fast_plots": True             # Lower DPI (100 vs 150)
+}
+```
+
+### For Maximum Quality
+```python
+# In config.py
+DEFAULT_CONFIG = {
+    "dpi": 500,                     # High resolution
+    "downsample_factor": 1,         # No downsampling
+}
+```
+
+### For Large Datasets
+- Use parallel processing (enabled by default)
+- Increase `max_workers` in BATCH_CONFIG
+- Enable downsampling for faster previews
+- Use region extraction to focus on relevant areas

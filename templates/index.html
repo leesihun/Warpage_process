@@ -95,6 +95,143 @@
             border-radius: 5px;
             padding: 10px;
         }
+
+        /* Margin Editor Styles */
+        .margin-editor {
+            padding: 10px;
+            border-radius: 8px;
+            background: #f8f9fa;
+        }
+
+        .margin-preview-container {
+            width: 100%;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+
+        .margin-preview-box {
+            width: 100%;
+            height: 200px;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+
+        .margin-area {
+            background: repeating-linear-gradient(
+                45deg,
+                #ffe6e6,
+                #ffe6e6 10px,
+                #ffcccc 10px,
+                #ffcccc 20px
+            );
+            opacity: 0;
+            transition: all 0.3s ease;
+        }
+
+        .margin-area.active {
+            opacity: 1;
+        }
+
+        .margin-top {
+            width: 100%;
+            border-radius: 4px 4px 0 0;
+        }
+
+        .margin-bottom {
+            width: 100%;
+            border-radius: 0 0 4px 4px;
+        }
+
+        .margin-middle {
+            flex: 1;
+            display: flex;
+            flex-direction: row;
+        }
+
+        .margin-left {
+            border-radius: 0;
+        }
+
+        .margin-right {
+            border-radius: 0;
+        }
+
+        .selected-region {
+            flex: 1;
+            background: linear-gradient(135deg, #e7f3ff 0%, #cfe7ff 100%);
+            border: 2px solid #0066cc;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .selected-region::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(
+                45deg,
+                rgba(0, 102, 204, 0.05) 25%,
+                transparent 25%,
+                transparent 75%,
+                rgba(0, 102, 204, 0.05) 75%
+            );
+            background-size: 20px 20px;
+        }
+
+        .region-info {
+            text-align: center;
+            position: relative;
+            z-index: 1;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 8px 16px;
+            border-radius: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .region-info i {
+            color: #28a745;
+            font-size: 1.2em;
+            margin-bottom: 4px;
+        }
+
+        .region-info div {
+            font-weight: bold;
+            color: #0066cc;
+            font-size: 0.95em;
+        }
+
+        .form-range {
+            cursor: pointer;
+        }
+
+        .form-range::-webkit-slider-thumb {
+            background: #0066cc;
+            cursor: pointer;
+        }
+
+        .form-range::-moz-range-thumb {
+            background: #0066cc;
+            cursor: pointer;
+        }
+
+        .btn-group button.active {
+            background-color: #0066cc;
+            color: white;
+            border-color: #0066cc;
+        }
     </style>
 </head>
 <body>
@@ -154,17 +291,143 @@
                                 </div>
                             </div>
 
-                            <div class="row">
-                                <div class="col-md-6">
+                            <!-- Region Selection / Margin Controls -->
+                            <div class="mb-3">
+                                <label class="form-label">
+                                    <i class="fas fa-crop"></i> Region Selection
+                                    <small class="text-muted">(Set margins to crop data)</small>
+                                </label>
+
+                                <!-- Mode Toggle Buttons -->
+                                <div class="btn-group w-100 mb-3" role="group">
+                                    <button type="button" class="btn btn-outline-primary btn-sm active" id="visualModeBtn" onclick="switchMarginMode('visual')">
+                                        <i class="fas fa-eye"></i> Visual Mode
+                                    </button>
+                                    <button type="button" class="btn btn-outline-primary btn-sm" id="numericModeBtn" onclick="switchMarginMode('numeric')">
+                                        <i class="fas fa-keyboard"></i> Numeric Mode
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="legacyModeBtn" onclick="switchMarginMode('legacy')">
+                                        <i class="fas fa-history"></i> Legacy
+                                    </button>
+                                </div>
+
+                                <!-- Visual Mode Interface -->
+                                <div id="visualMarginEditor" class="margin-editor">
+                                    <!-- Top Margin Slider -->
+                                    <div class="mb-2">
+                                        <label for="topMarginSlider" class="form-label d-flex justify-content-between">
+                                            <span><i class="fas fa-arrow-down"></i> Top</span>
+                                            <span id="topMarginValue" class="badge bg-primary">0%</span>
+                                        </label>
+                                        <input type="range" class="form-range" id="topMarginSlider" min="0" max="90" step="1" value="0" oninput="updateMarginValues()">
+                                    </div>
+
+                                    <!-- Visual Preview Box -->
+                                    <div class="margin-preview-container mb-2">
+                                        <div class="margin-preview-box" id="marginPreviewBox">
+                                            <div class="margin-area margin-top" id="marginTopArea"></div>
+                                            <div class="margin-middle">
+                                                <div class="margin-area margin-left" id="marginLeftArea"></div>
+                                                <div class="selected-region" id="selectedRegion">
+                                                    <div class="region-info">
+                                                        <i class="fas fa-check-circle"></i>
+                                                        <div id="regionDimensions">100% × 100%</div>
+                                                    </div>
+                                                </div>
+                                                <div class="margin-area margin-right" id="marginRightArea"></div>
+                                            </div>
+                                            <div class="margin-area margin-bottom" id="marginBottomArea"></div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Left and Right Margin Sliders (Side by side) -->
+                                    <div class="row mb-2">
+                                        <div class="col-md-6">
+                                            <label for="leftMarginSlider" class="form-label d-flex justify-content-between">
+                                                <span><i class="fas fa-arrow-right"></i> Left</span>
+                                                <span id="leftMarginValue" class="badge bg-primary">0%</span>
+                                            </label>
+                                            <input type="range" class="form-range" id="leftMarginSlider" min="0" max="90" step="1" value="0" oninput="updateMarginValues()">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="rightMarginSlider" class="form-label d-flex justify-content-between">
+                                                <span><i class="fas fa-arrow-left"></i> Right</span>
+                                                <span id="rightMarginValue" class="badge bg-primary">0%</span>
+                                            </label>
+                                            <input type="range" class="form-range" id="rightMarginSlider" min="0" max="90" step="1" value="0" oninput="updateMarginValues()">
+                                        </div>
+                                    </div>
+
+                                    <!-- Bottom Margin Slider -->
                                     <div class="mb-3">
-                                        <label for="rowFraction" class="form-label">Row Fraction</label>
-                                        <input type="number" class="form-control" id="rowFraction" value="1.0" min="0.1" max="1.0" step="0.1">
+                                        <label for="bottomMarginSlider" class="form-label d-flex justify-content-between">
+                                            <span><i class="fas fa-arrow-up"></i> Bottom</span>
+                                            <span id="bottomMarginValue" class="badge bg-primary">0%</span>
+                                        </label>
+                                        <input type="range" class="form-range" id="bottomMarginSlider" min="0" max="90" step="1" value="0" oninput="updateMarginValues()">
+                                    </div>
+
+                                    <!-- Preset Buttons -->
+                                    <div class="mb-2">
+                                        <label class="form-label">Quick Presets:</label>
+                                        <div class="btn-group-sm d-flex gap-1" role="group">
+                                            <button type="button" class="btn btn-outline-secondary btn-sm flex-fill" onclick="applyMarginPreset('reset')">
+                                                <i class="fas fa-undo"></i> Reset
+                                            </button>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm flex-fill" onclick="applyMarginPreset('center90')">
+                                                Center 90%
+                                            </button>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm flex-fill" onclick="applyMarginPreset('center80')">
+                                                Center 80%
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
-                                <div class="col-md-6">
-                                    <div class="mb-3">
-                                        <label for="colFraction" class="form-label">Column Fraction</label>
-                                        <input type="number" class="form-control" id="colFraction" value="1.0" min="0.1" max="1.0" step="0.1">
+
+                                <!-- Numeric Mode Interface -->
+                                <div id="numericMarginEditor" class="margin-editor" style="display: none;">
+                                    <div class="row">
+                                        <div class="col-md-6 mb-2">
+                                            <label for="topMarginInput" class="form-label">Top Margin (%)</label>
+                                            <input type="number" class="form-control form-control-sm" id="topMarginInput" min="0" max="90" step="1" value="0" oninput="syncMarginInputs()">
+                                        </div>
+                                        <div class="col-md-6 mb-2">
+                                            <label for="bottomMarginInput" class="form-label">Bottom Margin (%)</label>
+                                            <input type="number" class="form-control form-control-sm" id="bottomMarginInput" min="0" max="90" step="1" value="0" oninput="syncMarginInputs()">
+                                        </div>
+                                        <div class="col-md-6 mb-2">
+                                            <label for="leftMarginInput" class="form-label">Left Margin (%)</label>
+                                            <input type="number" class="form-control form-control-sm" id="leftMarginInput" min="0" max="90" step="1" value="0" oninput="syncMarginInputs()">
+                                        </div>
+                                        <div class="col-md-6 mb-2">
+                                            <label for="rightMarginInput" class="form-label">Right Margin (%)</label>
+                                            <input type="number" class="form-control form-control-sm" id="rightMarginInput" min="0" max="90" step="1" value="0" oninput="syncMarginInputs()">
+                                        </div>
+                                    </div>
+                                    <div class="alert alert-info mt-2 mb-2" style="padding: 0.5rem; font-size: 0.85rem;">
+                                        <i class="fas fa-info-circle"></i>
+                                        <strong id="numericRegionInfo">Selected: 100% × 100%</strong>
+                                    </div>
+                                </div>
+
+                                <!-- Legacy Mode Interface -->
+                                <div id="legacyMarginEditor" class="margin-editor" style="display: none;">
+                                    <div class="alert alert-warning" style="padding: 0.5rem; font-size: 0.85rem;">
+                                        <i class="fas fa-exclamation-triangle"></i> Legacy mode uses centered cropping (symmetric margins)
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6 mb-2">
+                                            <label for="rowFraction" class="form-label">Row Fraction</label>
+                                            <input type="number" class="form-control" id="rowFraction" value="1.0" min="0.1" max="1.0" step="0.1" oninput="updateLegacyFractions()">
+                                        </div>
+                                        <div class="col-md-6 mb-2">
+                                            <label for="colFraction" class="form-label">Column Fraction</label>
+                                            <input type="number" class="form-control" id="colFraction" value="1.0" min="0.1" max="1.0" step="0.1" oninput="updateLegacyFractions()">
+                                        </div>
+                                    </div>
+                                    <div class="alert alert-secondary mt-2" style="padding: 0.5rem; font-size: 0.85rem;">
+                                        <i class="fas fa-arrows-alt"></i>
+                                        <span id="legacyRegionInfo">Keeps 100% rows × 100% columns (centered)</span>
                                     </div>
                                 </div>
                             </div>
@@ -561,6 +824,193 @@
             }
         }
 
+        // ========== MARGIN EDITOR FUNCTIONS ==========
+
+        let currentMarginMode = 'visual'; // visual, numeric, or legacy
+
+        // Get current margin values
+        function getMarginValues() {
+            const top = parseInt(document.getElementById('topMarginSlider')?.value || 0);
+            const bottom = parseInt(document.getElementById('bottomMarginSlider')?.value || 0);
+            const left = parseInt(document.getElementById('leftMarginSlider')?.value || 0);
+            const right = parseInt(document.getElementById('rightMarginSlider')?.value || 0);
+            return { top, bottom, left, right };
+        }
+
+        // Update margin preview visual
+        function updateMarginPreview() {
+            const margins = getMarginValues();
+
+            // Update value badges
+            document.getElementById('topMarginValue').textContent = margins.top + '%';
+            document.getElementById('bottomMarginValue').textContent = margins.bottom + '%';
+            document.getElementById('leftMarginValue').textContent = margins.left + '%';
+            document.getElementById('rightMarginValue').textContent = margins.right + '%';
+
+            // Update visual preview areas
+            const topArea = document.getElementById('marginTopArea');
+            const bottomArea = document.getElementById('marginBottomArea');
+            const leftArea = document.getElementById('marginLeftArea');
+            const rightArea = document.getElementById('marginRightArea');
+
+            // Set heights/widths and toggle active class
+            if (margins.top > 0) {
+                topArea.style.height = margins.top + '%';
+                topArea.classList.add('active');
+            } else {
+                topArea.style.height = '0%';
+                topArea.classList.remove('active');
+            }
+
+            if (margins.bottom > 0) {
+                bottomArea.style.height = margins.bottom + '%';
+                bottomArea.classList.add('active');
+            } else {
+                bottomArea.style.height = '0%';
+                bottomArea.classList.remove('active');
+            }
+
+            if (margins.left > 0) {
+                leftArea.style.width = margins.left + '%';
+                leftArea.classList.add('active');
+            } else {
+                leftArea.style.width = '0%';
+                leftArea.classList.remove('active');
+            }
+
+            if (margins.right > 0) {
+                rightArea.style.width = margins.right + '%';
+                rightArea.classList.add('active');
+            } else {
+                rightArea.style.width = '0%';
+                rightArea.classList.remove('active');
+            }
+
+            // Update region dimensions display
+            const widthPercent = 100 - margins.left - margins.right;
+            const heightPercent = 100 - margins.top - margins.bottom;
+            document.getElementById('regionDimensions').textContent =
+                `${widthPercent}% × ${heightPercent}%`;
+        }
+
+        // Update margin values from sliders
+        function updateMarginValues() {
+            updateMarginPreview();
+
+            // Sync numeric inputs if in numeric mode
+            if (currentMarginMode === 'numeric') {
+                const margins = getMarginValues();
+                document.getElementById('topMarginInput').value = margins.top;
+                document.getElementById('bottomMarginInput').value = margins.bottom;
+                document.getElementById('leftMarginInput').value = margins.left;
+                document.getElementById('rightMarginInput').value = margins.right;
+
+                const widthPercent = 100 - margins.left - margins.right;
+                const heightPercent = 100 - margins.top - margins.bottom;
+                document.getElementById('numericRegionInfo').textContent =
+                    `Selected: ${widthPercent}% × ${heightPercent}%`;
+            }
+        }
+
+        // Sync margin inputs from numeric mode
+        function syncMarginInputs() {
+            const top = parseInt(document.getElementById('topMarginInput')?.value || 0);
+            const bottom = parseInt(document.getElementById('bottomMarginInput')?.value || 0);
+            const left = parseInt(document.getElementById('leftMarginInput')?.value || 0);
+            const right = parseInt(document.getElementById('rightMarginInput')?.value || 0);
+
+            // Validate that margins don't exceed 90% total
+            if (left + right >= 100) {
+                document.getElementById('leftMarginInput').value = Math.min(left, 90);
+                document.getElementById('rightMarginInput').value = 0;
+                return;
+            }
+            if (top + bottom >= 100) {
+                document.getElementById('topMarginInput').value = Math.min(top, 90);
+                document.getElementById('bottomMarginInput').value = 0;
+                return;
+            }
+
+            // Update sliders
+            document.getElementById('topMarginSlider').value = top;
+            document.getElementById('bottomMarginSlider').value = bottom;
+            document.getElementById('leftMarginSlider').value = left;
+            document.getElementById('rightMarginSlider').value = right;
+
+            updateMarginPreview();
+
+            const widthPercent = 100 - left - right;
+            const heightPercent = 100 - top - bottom;
+            document.getElementById('numericRegionInfo').textContent =
+                `Selected: ${widthPercent}% × ${heightPercent}%`;
+        }
+
+        // Update legacy fractions
+        function updateLegacyFractions() {
+            const rowFraction = parseFloat(document.getElementById('rowFraction').value);
+            const colFraction = parseFloat(document.getElementById('colFraction').value);
+
+            const rowPercent = (rowFraction * 100).toFixed(0);
+            const colPercent = (colFraction * 100).toFixed(0);
+            document.getElementById('legacyRegionInfo').textContent =
+                `Keeps ${rowPercent}% rows × ${colPercent}% columns (centered)`;
+        }
+
+        // Switch margin mode
+        function switchMarginMode(mode) {
+            currentMarginMode = mode;
+
+            // Update button states
+            document.getElementById('visualModeBtn').classList.remove('active');
+            document.getElementById('numericModeBtn').classList.remove('active');
+            document.getElementById('legacyModeBtn').classList.remove('active');
+
+            // Hide all editors
+            document.getElementById('visualMarginEditor').style.display = 'none';
+            document.getElementById('numericMarginEditor').style.display = 'none';
+            document.getElementById('legacyMarginEditor').style.display = 'none';
+
+            // Show selected editor
+            if (mode === 'visual') {
+                document.getElementById('visualModeBtn').classList.add('active');
+                document.getElementById('visualMarginEditor').style.display = 'block';
+                updateMarginPreview();
+            } else if (mode === 'numeric') {
+                document.getElementById('numericModeBtn').classList.add('active');
+                document.getElementById('numericMarginEditor').style.display = 'block';
+                syncMarginInputs();
+            } else if (mode === 'legacy') {
+                document.getElementById('legacyModeBtn').classList.add('active');
+                document.getElementById('legacyMarginEditor').style.display = 'block';
+                updateLegacyFractions();
+            }
+        }
+
+        // Apply margin preset
+        function applyMarginPreset(preset) {
+            if (preset === 'reset') {
+                // Reset all margins to 0
+                document.getElementById('topMarginSlider').value = 0;
+                document.getElementById('bottomMarginSlider').value = 0;
+                document.getElementById('leftMarginSlider').value = 0;
+                document.getElementById('rightMarginSlider').value = 0;
+            } else if (preset === 'center90') {
+                // 5% margin on all sides (keeps 90%)
+                document.getElementById('topMarginSlider').value = 5;
+                document.getElementById('bottomMarginSlider').value = 5;
+                document.getElementById('leftMarginSlider').value = 5;
+                document.getElementById('rightMarginSlider').value = 5;
+            } else if (preset === 'center80') {
+                // 10% margin on all sides (keeps 80%)
+                document.getElementById('topMarginSlider').value = 10;
+                document.getElementById('bottomMarginSlider').value = 10;
+                document.getElementById('leftMarginSlider').value = 10;
+                document.getElementById('rightMarginSlider').value = 10;
+            }
+
+            updateMarginValues();
+        }
+
         // Load available folders
         async function loadFolders() {
             try {
@@ -589,14 +1039,36 @@
         // Handle form submission
         document.getElementById('analysisForm').addEventListener('submit', async function(e) {
             e.preventDefault();
-            
+
             const folder = document.getElementById('folderSelect').value;
             const fileType = document.querySelector('input[name="fileType"]:checked').value;
-            const rowFraction = parseFloat(document.getElementById('rowFraction').value);
-            const colFraction = parseFloat(document.getElementById('colFraction').value);
             const autoScale = document.getElementById('autoScale').checked;
             const vmin = autoScale ? null : (document.getElementById('vmin').value ? parseFloat(document.getElementById('vmin').value) : null);
             const vmax = autoScale ? null : (document.getElementById('vmax').value ? parseFloat(document.getElementById('vmax').value) : null);
+
+            // Prepare margin/fraction parameters based on current mode
+            let requestBody = {
+                folder: folder,
+                file_type: fileType,
+                use_original: fileType === 'original',
+                vmin: vmin,
+                vmax: vmax
+            };
+
+            if (currentMarginMode === 'legacy') {
+                // Use legacy row_fraction and col_fraction
+                const rowFraction = parseFloat(document.getElementById('rowFraction').value);
+                const colFraction = parseFloat(document.getElementById('colFraction').value);
+                requestBody.row_fraction = rowFraction;
+                requestBody.col_fraction = colFraction;
+            } else {
+                // Use new margin system (visual or numeric mode)
+                const margins = getMarginValues();
+                requestBody.margin_left = margins.left / 100;    // Convert to fraction
+                requestBody.margin_right = margins.right / 100;
+                requestBody.margin_top = margins.top / 100;
+                requestBody.margin_bottom = margins.bottom / 100;
+            }
 
             if (!folder) {
                 showAlert('Please select a folder', 'warning');
@@ -614,7 +1086,7 @@
             document.getElementById('exportCard').style.display = 'none';
             document.getElementById('analysisSummary').style.display = 'none';
             document.getElementById('resultsTabs').style.display = 'none';
-            
+
             // Reset progress
             document.getElementById('analysisProgress').style.width = '0%';
             document.getElementById('analysisProgress').textContent = '0%';
@@ -627,15 +1099,7 @@
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({
-                        folder: folder,
-                        file_type: fileType,
-                        use_original: fileType === 'original',
-                        row_fraction: rowFraction,
-                        col_fraction: colFraction,
-                        vmin: vmin,
-                        vmax: vmax
-                    })
+                    body: JSON.stringify(requestBody)
                 });
 
                 const data = await response.json();
@@ -676,8 +1140,20 @@
                     }
                     document.getElementById('summaryColorScale').textContent = colorScaleText;
                     
-                    // Update settings info
-                    const settingsText = `Rows: ${(rowFraction * 100).toFixed(0)}%, Cols: ${(colFraction * 100).toFixed(0)}%`;
+                    // Update settings info based on margin mode
+                    let settingsText;
+                    if (data.summary.margins && data.summary.margins.using_margin_system) {
+                        const m = data.summary.margins;
+                        const widthPercent = (100 - m.left_margin * 100 - m.right_margin * 100).toFixed(0);
+                        const heightPercent = (100 - m.top_margin * 100 - m.bottom_margin * 100).toFixed(0);
+                        settingsText = `Region: ${heightPercent}% × ${widthPercent}% (L:${(m.left_margin * 100).toFixed(0)}% R:${(m.right_margin * 100).toFixed(0)}% T:${(m.top_margin * 100).toFixed(0)}% B:${(m.bottom_margin * 100).toFixed(0)}%)`;
+                    } else if (data.summary.margins) {
+                        const m = data.summary.margins;
+                        settingsText = `Rows: ${(m.row_fraction * 100).toFixed(0)}%, Cols: ${(m.col_fraction * 100).toFixed(0)}% (centered)`;
+                    } else {
+                        // Fallback for older responses
+                        settingsText = 'Region: 100% × 100%';
+                    }
                     document.getElementById('summarySettings').textContent = settingsText;
                     
                     // Show results

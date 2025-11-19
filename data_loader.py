@@ -258,8 +258,8 @@ def _calculate_region_bounds(n_rows, n_cols, row_fraction, col_fraction):
 
 def extract_center_region(data_array, row_fraction=1, col_fraction=1):
     """
-    데이터 배열에서 중앙 영역 추출 - 성능 최적화
-    Extract center region from data array - performance optimized.
+    데이터 배열에서 중앙 영역 추출 - 성능 최적화 (레거시 함수)
+    Extract center region from data array - performance optimized (legacy function).
 
     Args:
         data_array (numpy.ndarray): 입력 데이터 배열 / Input data array
@@ -280,6 +280,97 @@ def extract_center_region(data_array, row_fraction=1, col_fraction=1):
 
     # Efficient slice extraction
     return data_array[row_start:row_end, col_start:col_end]
+
+
+@lru_cache(maxsize=64)
+def _calculate_margin_bounds(n_rows, n_cols, left_margin, right_margin, top_margin, bottom_margin):
+    """Cached calculation of margin boundaries for independent margin control."""
+    col_start = int(n_cols * left_margin)
+    col_end = int(n_cols * (1 - right_margin))
+    row_start = int(n_rows * top_margin)
+    row_end = int(n_rows * (1 - bottom_margin))
+
+    # Ensure valid bounds
+    col_start = max(0, min(col_start, n_cols - 1))
+    col_end = max(col_start + 1, min(col_end, n_cols))
+    row_start = max(0, min(row_start, n_rows - 1))
+    row_end = max(row_start + 1, min(row_end, n_rows))
+
+    return row_start, row_end, col_start, col_end
+
+
+def extract_region_with_margins(data_array, left_margin=0, right_margin=0, top_margin=0, bottom_margin=0):
+    """
+    데이터 배열에서 독립적인 여백 제어로 영역 추출
+    Extract region from data array with independent margin controls.
+
+    This function allows for asymmetric cropping by specifying different margins
+    for left, right, top, and bottom sides independently.
+
+    Args:
+        data_array (numpy.ndarray): 입력 데이터 배열 / Input data array
+        left_margin (float): 왼쪽에서 제거할 비율 (0.0-0.9) / Fraction to remove from left (0.0-0.9)
+        right_margin (float): 오른쪽에서 제거할 비율 (0.0-0.9) / Fraction to remove from right (0.0-0.9)
+        top_margin (float): 위에서 제거할 비율 (0.0-0.9) / Fraction to remove from top (0.0-0.9)
+        bottom_margin (float): 아래에서 제거할 비율 (0.0-0.9) / Fraction to remove from bottom (0.0-0.9)
+
+    Returns:
+        numpy.ndarray: 추출된 영역 데이터 / Extracted region data
+
+    Examples:
+        >>> data = np.ones((100, 100))
+        >>> # Remove 10% from left, 20% from right, 15% from top, 5% from bottom
+        >>> result = extract_region_with_margins(data, 0.1, 0.2, 0.15, 0.05)
+        >>> result.shape  # (80, 70) - 80% height, 70% width
+    """
+    # Fast path for no cropping
+    if left_margin == 0 and right_margin == 0 and top_margin == 0 and bottom_margin == 0:
+        return data_array
+
+    # Validate margins
+    if left_margin + right_margin >= 1.0:
+        raise ValueError(f"Sum of left_margin ({left_margin}) and right_margin ({right_margin}) must be < 1.0")
+    if top_margin + bottom_margin >= 1.0:
+        raise ValueError(f"Sum of top_margin ({top_margin}) and bottom_margin ({bottom_margin}) must be < 1.0")
+
+    n_rows, n_cols = data_array.shape
+
+    # Use cached boundary calculation
+    row_start, row_end, col_start, col_end = _calculate_margin_bounds(
+        n_rows, n_cols, left_margin, right_margin, top_margin, bottom_margin
+    )
+
+    # Efficient slice extraction
+    return data_array[row_start:row_end, col_start:col_end]
+
+
+def convert_fraction_to_margins(row_fraction=1, col_fraction=1):
+    """
+    레거시 row/col fraction 파라미터를 새로운 margin 파라미터로 변환
+    Convert legacy row_fraction/col_fraction parameters to new margin parameters.
+
+    Args:
+        row_fraction (float): 중앙에서 유지할 행의 비율 / Fraction of rows to keep in center
+        col_fraction (float): 중앙에서 유지할 열의 비율 / Fraction of columns to keep in center
+
+    Returns:
+        dict: 변환된 margin 파라미터 / Converted margin parameters
+              {'left_margin', 'right_margin', 'top_margin', 'bottom_margin'}
+
+    Examples:
+        >>> convert_fraction_to_margins(0.8, 0.8)
+        {'left_margin': 0.1, 'right_margin': 0.1, 'top_margin': 0.1, 'bottom_margin': 0.1}
+    """
+    # Centered cropping: equal margins on both sides
+    row_margin = (1 - row_fraction) / 2
+    col_margin = (1 - col_fraction) / 2
+
+    return {
+        'left_margin': col_margin,
+        'right_margin': col_margin,
+        'top_margin': row_margin,
+        'bottom_margin': row_margin
+    }
 
 
 def find_data_files(folder_path, file_type='original'):
@@ -357,14 +448,17 @@ def find_data_files(folder_path, file_type='original'):
 
 def _process_single_file_worker(file_path, row_fraction, col_fraction, downsample_factor):
     """
-    Worker function for multiprocessing - must be at module level.
-    처리할 단일 파일을 위한 워커 함수 - 모듈 최상위 레벨에 있어야 함.
+    Worker function for multiprocessing - must be at module level (LEGACY).
+    처리할 단일 파일을 위한 워커 함수 - 모듈 최상위 레벨에 있어야 함 (레거시).
+
+    Note: This function is kept for backward compatibility.
+    Use _process_single_file_with_margins() for new code.
     """
     try:
         from warpage_statistics import calculate_statistics
-        
+
         filename = os.path.basename(file_path)
-        
+
         # Use caching and pass downsample_factor directly to load function
         raw_data = load_data_from_file(file_path, downsample_factor)
         if raw_data is None:
@@ -375,6 +469,48 @@ def _process_single_file_worker(file_path, row_fraction, col_fraction, downsampl
         center_data = extract_center_region(raw_data, row_fraction, col_fraction) if center_region_needed else raw_data
 
         # 통계 계산 / Calculate statistics
+        stats = calculate_statistics(center_data)
+
+        return (center_data, stats, filename)
+    except Exception as e:
+        print(f"Error processing {file_path}: {e}")
+        return None
+
+
+def _process_single_file_with_margins(file_path, left_margin, right_margin, top_margin, bottom_margin, downsample_factor):
+    """
+    Worker function for multiprocessing with independent margin controls - must be at module level.
+    독립적인 여백 제어를 사용하는 멀티프로세싱 워커 함수 - 모듈 최상위 레벨에 있어야 함.
+
+    Args:
+        file_path (str): Path to the file to process
+        left_margin (float): Left margin fraction (0.0-0.9)
+        right_margin (float): Right margin fraction (0.0-0.9)
+        top_margin (float): Top margin fraction (0.0-0.9)
+        bottom_margin (float): Bottom margin fraction (0.0-0.9)
+        downsample_factor (int): Downsampling factor
+
+    Returns:
+        tuple: (center_data, stats, filename) or None if error
+    """
+    try:
+        from warpage_statistics import calculate_statistics
+
+        filename = os.path.basename(file_path)
+
+        # Load data with downsampling
+        raw_data = load_data_from_file(file_path, downsample_factor)
+        if raw_data is None:
+            return None
+
+        # Extract region with independent margins
+        margin_needed = (left_margin != 0 or right_margin != 0 or
+                        top_margin != 0 or bottom_margin != 0)
+        center_data = extract_region_with_margins(
+            raw_data, left_margin, right_margin, top_margin, bottom_margin
+        ) if margin_needed else raw_data
+
+        # Calculate statistics
         stats = calculate_statistics(center_data)
 
         return (center_data, stats, filename)
