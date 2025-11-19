@@ -19,7 +19,11 @@
       "Bash(findstr:*)",
       "Bash(netstat:*)",
       "Bash(start /B python:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(awk:*)",
+      "Bash(ls:*)",
+      "Bash(dir:*)",
+      "Bash(find . -maxdepth 1 -name \"*.py\" -exec grep -l \"torch\\|tensorflow\" {} ;)"
     ],
     "deny": [],
     "ask": []

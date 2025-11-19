@@ -200,5 +200,5 @@ SCAN_CONFIG = {
 # Settings for memory-efficient data loading using streaming line processing
 STREAMING_CONFIG = {
     'enable_streaming_loading': True,    # 스트리밍 데이터 로딩 활성화 / Enable streaming data loading (reads Nth row/column only)
-    'default_downsample_factor': 4,      # 기본 다운샘플링 비율 / Default downsampling factor (1=no downsampling, 2=half, 4=quarter)
+    'default_downsample_factor': 1,      # 기본 다운샘플링 비율 / Default downsampling factor (1=no downsampling, 2=half, 4=quarter)
 }
