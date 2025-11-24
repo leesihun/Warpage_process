@@ -2,11 +2,47 @@
 
 A powerful, user-friendly application for analyzing semiconductor warpage measurement data with advanced visualization and reporting capabilities.
 
-![Version](https://img.shields.io/badge/version-2.1.1-blue.svg)
+![Version](https://img.shields.io/badge/version-2.1.2-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.8+-green.svg)
 ![License](https://img.shields.io/badge/license-Proprietary-red.svg)
 
-## 🚀 Latest Updates (v2.1.1) - SERVER FIX & EXECUTABLE BUILD
+## 🚀 Latest Updates (v2.1.2) - WEB SERVER EXECUTABLE BUILD
+
+### 📦 **NEW STANDALONE WEB SERVER EXECUTABLE** 📦
+- **NEW**: Successfully built standalone executable `web_server.exe` (87.5MB)
+- **BUILD DATE**: November 19, 2025
+- **LOCATION**: `C:\Users\Lee\Desktop\Huni\PEMTRON_warpage\dist\web_server.exe`
+- **BUILD TOOL**: PyInstaller 6.16.0 with Python 3.12.10
+- **FEATURES**: Full Flask web interface with all visualization and analysis capabilities
+
+### 🔧 **Build Configuration**
+- **Spec File**: Created `web_server.spec` with optimized settings
+- **Included Resources**: Templates directory for web interface
+- **Hidden Imports**: matplotlib backends, scipy, sklearn utilities
+- **Excluded Modules**: torch, tensorflow, tkinter (reduced file size)
+- **Optimization**: UPX compression enabled for smaller executable
+- **Console Mode**: Enabled for debug output and server monitoring
+
+### ✅ **How to Run Web Server Executable**
+```bash
+# Navigate to dist folder and run web server executable
+cd "C:\Users\Lee\Desktop\Huni\PEMTRON_warpage\dist"
+web_server.exe
+```
+
+The web server will:
+- Start on `http://localhost:5001`
+- Automatically open browser (if configured)
+- Provide full web-based analysis interface
+- Support all visualization and export features
+
+### 📊 **Executable Details**
+- **File Size**: 87,543,242 bytes (~87.5 MB)
+- **Single File**: All dependencies bundled (no installation required)
+- **Portable**: Can be distributed as standalone application
+- **Platform**: Windows 64-bit
+
+## 🚀 Previous Updates (v2.1.1) - SERVER FIX & EXECUTABLE BUILD
 
 ### 🔧 **CRITICAL FIXES & NEW EXECUTABLE** 🔧
 - **FIXED**: Resolved Internal Server Error when accessing web interface
