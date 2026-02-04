@@ -19,7 +19,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 
 
 # Constants
-DEFAULT_BORDER_THICKNESS = 5
+DEFAULT_BORDER_THICKNESS = 1
 DEFAULT_FILL_OPACITY = 0.3
 MASK_COLOR = QtGui.QColor(255, 0, 0)
 MASK_VALUE = "9999.0"
@@ -349,20 +349,23 @@ class ImageAnnotationApp(QtWidgets.QMainWindow):
             if mask.any():
                 grid_z[mask] = np.nan
 
-            # Create figure with no padding or decorations
-            # Calculate figure size based on grid dimensions for proper aspect ratio
+            # Create figure with proper aspect ratio based on grid dimensions
+            # Use grid dimensions directly to preserve original aspect ratio
             aspect_ratio = self.grid_width / self.grid_height
+
+            # Scale figure size while maintaining aspect ratio
+            max_size = 12  # Maximum dimension in inches
             if aspect_ratio > 1:
-                fig_width = 10
-                fig_height = 10 / aspect_ratio
+                fig_width = max_size
+                fig_height = max_size / aspect_ratio
             else:
-                fig_width = 10 * aspect_ratio
-                fig_height = 10
+                fig_width = max_size * aspect_ratio
+                fig_height = max_size
 
             fig, ax = plt.subplots(figsize=(fig_width, fig_height), dpi=100)
 
-            # Plot heatmap - just the image, no decorations
-            ax.imshow(grid_z, cmap='jet', aspect='auto', interpolation='nearest')
+            # Plot heatmap with original aspect ratio preserved
+            ax.imshow(grid_z, cmap='jet', aspect='equal', interpolation='nearest')
 
             # Remove all axes, labels, and margins
             ax.set_axis_off()
@@ -818,6 +821,103 @@ class ImageAnnotationApp(QtWidgets.QMainWindow):
                 return True
         return False
 
+    def _load_grid_file(self, file_path: str) -> Optional[Tuple[List[List[str]], str]]:
+        """Load a grid file (.txt or .rawtxt) and return its data.
+
+        Args:
+            file_path: Path to the file to load
+
+        Returns:
+            Tuple of (grid_data, delimiter) or None if loading fails
+        """
+        try:
+            with open(file_path, "r", newline="") as f:
+                sample = f.read(2048)
+                f.seek(0)
+
+                try:
+                    dialect = csv.Sniffer().sniff(sample, delimiters=[',', '\t'])
+                    delimiter = dialect.delimiter
+                except csv.Error:
+                    delimiter = ','
+
+                reader = csv.reader(f, delimiter=delimiter)
+                rows = list(reader)
+
+            return rows, delimiter
+        except Exception as e:
+            print(f"Error loading {file_path}: {e}")
+            return None
+
+    def _mask_grid_data(
+        self,
+        grid_data: List[List[str]],
+        rectangles: List[Tuple[float, float, float, float]],
+        grid_width: int,
+        grid_height: int
+    ) -> Tuple[List[List[str]], int]:
+        """Apply masking to grid data based on rectangles.
+
+        For 2D grid data, rectangles specify grid cell ranges.
+        Masked cells have their values set to 9999.0.
+
+        Args:
+            grid_data: Raw grid data as list of lists
+            rectangles: List of (min_col, min_row, max_col, max_row) in grid indices
+            grid_width: Number of columns in the grid
+            grid_height: Number of rows in the grid
+
+        Returns:
+            Tuple of (processed_data, points_masked_count).
+        """
+        # Convert grid_data to numpy array for processing
+        grid_rows = []
+        for row in grid_data:
+            if len(row) == 0:
+                continue
+            try:
+                row_values = [float(val) for val in row]
+                grid_rows.append(row_values)
+            except ValueError:
+                # Skip non-numeric rows
+                continue
+
+        if not grid_rows:
+            return [], 0
+
+        # Convert to numpy array
+        grid_array = np.array(grid_rows, dtype=float)
+        points_masked = 0
+
+        # Apply masking for each rectangle
+        for min_col, min_row, max_col, max_row in rectangles:
+            # Convert to integer indices
+            min_col_idx = int(min_col)
+            max_col_idx = int(max_col)
+            min_row_idx = int(min_row)
+            max_row_idx = int(max_row)
+
+            # Clamp to valid grid bounds
+            min_col_idx = max(0, min(min_col_idx, grid_width - 1))
+            max_col_idx = max(0, min(max_col_idx, grid_width - 1))
+            min_row_idx = max(0, min(min_row_idx, grid_height - 1))
+            max_row_idx = max(0, min(max_row_idx, grid_height - 1))
+
+            # Count cells to be masked in this rectangle
+            for r in range(min_row_idx, max_row_idx + 1):
+                for c in range(min_col_idx, max_col_idx + 1):
+                    if r < grid_array.shape[0] and c < grid_array.shape[1]:
+                        if not np.isnan(grid_array[r, c]) and grid_array[r, c] != 9999.0:
+                            points_masked += 1
+                        grid_array[r, c] = 9999.0
+
+        # Convert back to list of lists with strings
+        processed = []
+        for row in grid_array:
+            processed.append([f"{val:.1f}" if not np.isnan(val) else "9999.0" for val in row])
+
+        return processed, points_masked
+
     def _mask_raw_data(
         self,
         rectangles: List[Tuple[float, float, float, float]]
@@ -833,58 +933,16 @@ class ImageAnnotationApp(QtWidgets.QMainWindow):
         Returns:
             Tuple of (processed_data, points_masked_count).
         """
-        # Convert raw_data to numpy array for processing
-        grid_rows = []
-        for row in self.raw_data:
-            if len(row) == 0:
-                continue
-            try:
-                row_values = [float(val) for val in row]
-                grid_rows.append(row_values)
-            except ValueError:
-                # Skip non-numeric rows
-                continue
-
-        if not grid_rows:
-            return [], 0
-
-        # Convert to numpy array
-        grid_data = np.array(grid_rows, dtype=float)
-        points_masked = 0
-
-        # Apply masking for each rectangle
-        for min_col, min_row, max_col, max_row in rectangles:
-            # Convert to integer indices
-            min_col_idx = int(min_col)
-            max_col_idx = int(max_col)
-            min_row_idx = int(min_row)
-            max_row_idx = int(max_row)
-
-            # Clamp to valid grid bounds
-            min_col_idx = max(0, min(min_col_idx, self.grid_width - 1))
-            max_col_idx = max(0, min(max_col_idx, self.grid_width - 1))
-            min_row_idx = max(0, min(min_row_idx, self.grid_height - 1))
-            max_row_idx = max(0, min(max_row_idx, self.grid_height - 1))
-
-            # Count cells to be masked in this rectangle
-            for r in range(min_row_idx, max_row_idx + 1):
-                for c in range(min_col_idx, max_col_idx + 1):
-                    if not np.isnan(grid_data[r, c]) and grid_data[r, c] != 9999.0:
-                        points_masked += 1
-                    grid_data[r, c] = 9999.0
-
-        # Convert back to list of lists with strings
-        processed = []
-        for row in grid_data:
-            processed.append([f"{val:.1f}" if not np.isnan(val) else "9999.0" for val in row])
-
-        return processed, points_masked
+        return self._mask_grid_data(self.raw_data, rectangles, self.grid_width, self.grid_height)
 
     def apply_raw_mask(self) -> None:
-        """Apply raw mask using previously loaded raw data.
+        """Apply raw mask to all .txt and .rawtxt files in the loaded file's directory.
 
-        For each coordinate in raw_data, if it falls within any drawn rectangle,
-        its x and y values are replaced with the mask value (9999.0).
+        For each coordinate in grid data, if it falls within any drawn rectangle,
+        its value is replaced with the mask value (9999.0).
+
+        Processes all .txt and .rawtxt files in the same directory as the loaded file,
+        and saves masked versions to a 'masked/' subdirectory.
 
         Properly accounts for:
         - Size differences between JPG and raw data
@@ -910,6 +968,27 @@ class ImageAnnotationApp(QtWidgets.QMainWindow):
             )
             return
 
+        # Get the directory of the loaded file
+        raw_dir = os.path.dirname(self.raw_path) if self.raw_path else os.getcwd()
+
+        # Find all .txt and .rawtxt files in the directory
+        txt_files = []
+        for file in os.listdir(raw_dir):
+            if file.endswith('.txt') or file.endswith('.rawtxt'):
+                txt_files.append(os.path.join(raw_dir, file))
+
+        if not txt_files:
+            QtWidgets.QMessageBox.information(
+                self,
+                "Info",
+                f"No .txt or .rawtxt files found in {raw_dir}"
+            )
+            return
+
+        # Create masked output directory
+        masked_dir = os.path.join(raw_dir, "masked")
+        os.makedirs(masked_dir, exist_ok=True)
+
         # Show coordinate system info
         raw_bounds = self._get_raw_bounds()
         if raw_bounds:
@@ -932,34 +1011,93 @@ class ImageAnnotationApp(QtWidgets.QMainWindow):
                       f"Row=[{min_row_rect:.0f}, {max_row_rect:.0f}]")
             print("=" * 60)
 
-        # Apply masking
-        processed, points_masked = self._mask_raw_data(rectangles)
+        # Process each file
+        total_files_processed = 0
+        total_points_masked = 0
+        failed_files = []
 
-        print(f"\nMasking result: {points_masked} points masked out of {len(self.raw_data)} total rows")
+        for file_path in txt_files:
+            filename = os.path.basename(file_path)
+            print(f"\nProcessing: {filename}")
+
+            # Load the file
+            result = self._load_grid_file(file_path)
+            if result is None:
+                failed_files.append(filename)
+                continue
+
+            grid_data, delimiter = result
+
+            # Determine grid dimensions for this file
+            grid_rows = []
+            for row in grid_data:
+                if len(row) == 0:
+                    continue
+                try:
+                    [float(val) for val in row]
+                    grid_rows.append(len(row))
+                except ValueError:
+                    continue
+
+            if not grid_rows:
+                print(f"  Skipped: No valid numeric data found")
+                failed_files.append(filename)
+                continue
+
+            file_grid_height = len(grid_rows)
+            file_grid_width = max(grid_rows) if grid_rows else 0
+
+            # Apply masking
+            processed, points_masked = self._mask_grid_data(
+                grid_data,
+                rectangles,
+                file_grid_width,
+                file_grid_height
+            )
+
+            if not processed:
+                print(f"  Skipped: Masking failed")
+                failed_files.append(filename)
+                continue
+
+            # Save to masked directory
+            out_path = os.path.join(masked_dir, filename)
+            try:
+                with open(out_path, "w", newline="") as f:
+                    writer = csv.writer(f, delimiter=delimiter)
+                    writer.writerows(processed)
+
+                total_files_processed += 1
+                total_points_masked += points_masked
+                print(f"  Masked {points_masked} points -> {os.path.join('masked', filename)}")
+            except Exception as e:
+                print(f"  Error saving: {e}")
+                failed_files.append(filename)
+
+        print("=" * 60)
+        print(f"\nMasking complete:")
+        print(f"  Files processed: {total_files_processed}/{len(txt_files)}")
+        print(f"  Total points masked: {total_points_masked}")
+        print(f"  Output directory: {masked_dir}")
+        if failed_files:
+            print(f"  Failed files: {', '.join(failed_files)}")
         print("=" * 60)
 
-        # Save result
-        raw_dir = os.path.dirname(self.raw_path) if self.raw_path else os.getcwd()
-        out_path = os.path.join(raw_dir, "Raw_mask.txt")
+        # Show completion message
+        message = (
+            f"Masking complete!\n\n"
+            f"Files processed: {total_files_processed}/{len(txt_files)}\n"
+            f"Total points masked: {total_points_masked}\n"
+            f"Output directory: {os.path.join(os.path.basename(raw_dir), 'masked')}"
+        )
+        if failed_files:
+            message += f"\n\nFailed files:\n" + "\n".join(f"  - {f}" for f in failed_files)
 
-        try:
-            with open(out_path, "w", newline="") as f:
-                writer = csv.writer(f, delimiter=self.raw_delimiter)
-                writer.writerows(processed)
-            total_cells = self.grid_height * self.grid_width
-            QtWidgets.QMessageBox.information(
-                self,
-                "Success",
-                f"Raw_mask.txt saved to {out_path}\n\n"
-                f"Grid cells masked: {points_masked} / {total_cells}\n"
-                f"Grid dimensions: {self.grid_width} columns x {self.grid_height} rows"
-            )
-        except Exception as e:
-            QtWidgets.QMessageBox.critical(
-                self,
-                "Error",
-                f"Failed to save Raw_mask.txt: {e}"
-            )
+        QtWidgets.QMessageBox.information(
+            self,
+            "Masking Complete",
+            message
+        )
 
 
 def main():
