@@ -63,18 +63,18 @@ python mask.py
 
 ### Input (.rawtxt)
 
-The application expects tab or comma-delimited text files with at least 3 columns:
+The application expects **2D grid files** where each line is a row and values are space or tab-separated columns:
 ```
-X,Y,Z
-10.0,20.0,5.2
-10.5,20.0,5.3
-...
+10.5 12.3 15.7 14.2 13.8
+11.2 13.1 16.2 15.5 14.1
+12.8 14.5 17.3 16.8 15.2
 ```
 
-- Column 1: X coordinate
-- Column 2: Y coordinate
-- Column 3: Z value (warpage measurement)
-- Values of 9999.0 are treated as invalid/masked data
+- Each **line** = grid **row**
+- Each **value** = grid **column**
+- Values represent warpage measurements in micrometers (μm)
+- NO explicit X,Y coordinates - just the Z values in a 2D grid
+- Values of ±9999, ±99999, or -4000 are treated as invalid/masked data
 
 ### Output (Raw_mask.txt)
 

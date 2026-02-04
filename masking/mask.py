@@ -305,7 +305,8 @@ class ImageAnnotationApp(QtWidgets.QMainWindow):
     def _generate_heatmap_from_raw_data(self) -> Optional[QtGui.QPixmap]:
         """Generate a heatmap visualization from loaded raw data.
 
-        Converts 9999.0 values to NaN for proper visualization.
+        .rawtxt files are 2D grids where each line is a row and values are columns.
+        Converts 9999.0 and other artifact values to NaN for proper visualization.
 
         Returns:
             QPixmap of the generated heatmap, or None on failure.
@@ -314,49 +315,39 @@ class ImageAnnotationApp(QtWidgets.QMainWindow):
             return None
 
         try:
-            # Extract X, Y, Z coordinates from raw data
-            coords = []
+            # Parse 2D grid data from raw_data
+            # Each row in raw_data is a line from the file
+            # Each value in the line is a grid column
+            grid_rows = []
             for row in self.raw_data:
-                if len(row) < 3:
+                if len(row) == 0:
                     continue
                 try:
-                    x = float(row[0])
-                    y = float(row[1])
-                    z = float(row[2])
-                    # Convert 9999.0 to NaN
-                    if abs(z - 9999.0) < 0.1:
-                        z = np.nan
-                    coords.append((x, y, z))
+                    # Convert all values to float
+                    row_values = [float(val) for val in row]
+                    grid_rows.append(row_values)
                 except ValueError:
+                    # Skip rows that can't be converted (headers, comments)
                     continue
 
-            if not coords:
+            if not grid_rows:
                 return None
 
-            # Convert to numpy arrays
-            coords_array = np.array(coords)
-            x_vals = coords_array[:, 0]
-            y_vals = coords_array[:, 1]
+            # Convert to numpy array (2D grid)
+            grid_z = np.array(grid_rows, dtype=float)
 
-            # Get unique x and y values to determine grid dimensions
-            unique_x = np.unique(x_vals)
-            unique_y = np.unique(y_vals)
+            # Store grid dimensions for coordinate conversion
+            self.grid_height, self.grid_width = grid_z.shape
+            # For grid data, unique_x and unique_y are just indices
+            self.unique_x = np.arange(self.grid_width)
+            self.unique_y = np.arange(self.grid_height)
 
-            # Store grid mapping for coordinate conversion
-            self.unique_x = unique_x
-            self.unique_y = unique_y
-            self.grid_width = len(unique_x)
-            self.grid_height = len(unique_y)
-
-            # Create grid
-            grid_z = np.full((len(unique_y), len(unique_x)), np.nan)
-
-            # Fill grid with z values
-            for x, y, z in coords:
-                x_idx = np.searchsorted(unique_x, x)
-                y_idx = np.searchsorted(unique_y, y)
-                if x_idx < len(unique_x) and y_idx < len(unique_y):
-                    grid_z[y_idx, x_idx] = z
+            # Convert artifact values to NaN (following data_loader.py pattern)
+            # Artifact values: -4000, 9999, -9999, 99999, -99999
+            invalid_values = np.array([-4000, 9999, -9999, 99999, -99999])
+            mask = np.isin(grid_z, invalid_values)
+            if mask.any():
+                grid_z[mask] = np.nan
 
             # Create figure
             fig, ax = plt.subplots(figsize=(10, 8), dpi=100)
@@ -369,8 +360,8 @@ class ImageAnnotationApp(QtWidgets.QMainWindow):
 
             # Set title
             ax.set_title(f'Warpage Heatmap: {os.path.basename(self.raw_path) if self.raw_path else "Unknown"}')
-            ax.set_xlabel('X')
-            ax.set_ylabel('Y')
+            ax.set_xlabel('Column')
+            ax.set_ylabel('Row')
 
             # Remove axis ticks for cleaner look
             ax.set_xticks([])
@@ -426,18 +417,26 @@ class ImageAnnotationApp(QtWidgets.QMainWindow):
             self.raw_delimiter = delimiter
             self.raw_path = raw_path
 
-            # Analyze raw data bounds
-            raw_bounds = self._get_raw_bounds()
-            if raw_bounds:
-                min_x, max_x, min_y, max_y, width, height = raw_bounds
+            # Calculate grid dimensions
+            grid_rows = []
+            for row in rows:
+                if len(row) == 0:
+                    continue
+                try:
+                    [float(val) for val in row]
+                    grid_rows.append(len(row))
+                except ValueError:
+                    continue
+
+            if grid_rows:
+                num_rows = len(grid_rows)
+                num_cols = max(grid_rows) if grid_rows else 0
                 msg = (
                     f"Loaded raw data from {os.path.basename(raw_path)}\n\n"
-                    f"Data bounds:\n"
-                    f"  X: [{min_x:.2f}, {max_x:.2f}] (width: {width:.2f})\n"
-                    f"  Y: [{min_y:.2f}, {max_y:.2f}] (height: {height:.2f})\n"
-                    f"  Total points: {len(rows)}\n\n"
-                    f"Current Y-axis orientation: {'DOWN' if self.raw_data_y_axis_down else 'UP'}\n"
-                    f"(Change in Settings > Toggle Y-Axis Orientation if needed)"
+                    f"Grid dimensions:\n"
+                    f"  Rows: {num_rows}\n"
+                    f"  Columns: {num_cols}\n"
+                    f"  Total data points: {num_rows * num_cols}\n"
                 )
             else:
                 msg = f"Loaded raw data from {os.path.basename(raw_path)}\n{len(rows)} rows"
@@ -510,41 +509,25 @@ class ImageAnnotationApp(QtWidgets.QMainWindow):
         return pixel_coords
 
     def _get_raw_bounds(self) -> Optional[Tuple[float, float, float, float, float, float]]:
-        """Extract bounds from raw data by finding min and max coordinates.
+        """Extract bounds from raw grid data.
+
+        For 2D grid data, bounds are based on grid dimensions (rows, columns).
 
         Returns:
-            Tuple of (min_x, max_x, min_y, max_y, width, height) or None.
+            Tuple of (min_col, max_col, min_row, max_row, width, height) or None.
         """
-        if not self.raw_data:
+        if not self.raw_data or self.grid_width == 0 or self.grid_height == 0:
             return None
 
-        min_x, max_x = float('inf'), -float('inf')
-        min_y, max_y = float('inf'), -float('inf')
+        # For grid data, bounds are simply the grid dimensions
+        min_col = 0
+        max_col = self.grid_width - 1
+        min_row = 0
+        max_row = self.grid_height - 1
+        width = self.grid_width
+        height = self.grid_height
 
-        for row in self.raw_data:
-            if len(row) < 2:
-                continue
-            try:
-                x = float(row[0])
-                y = float(row[1])
-                min_x = min(min_x, x)
-                max_x = max(max_x, x)
-                min_y = min(min_y, y)
-                max_y = max(max_y, y)
-            except ValueError:
-                continue
-
-        # Check if we found valid bounds
-        if min_x == float('inf') or max_x == -float('inf'):
-            return None
-
-        width = max_x - min_x
-        height = max_y - min_y
-
-        if width <= 0 or height <= 0:
-            return None
-
-        return (min_x, max_x, min_y, max_y, width, height)
+        return (min_col, max_col, min_row, max_row, width, height)
 
     def _interpolate_coords(
         self,
@@ -620,18 +603,17 @@ class ImageAnnotationApp(QtWidgets.QMainWindow):
         # Interpolate if raw bounds are known
         if raw_bounds:
             coords = self._interpolate_coords(pixel_coords, raw_bounds, (img_width, img_height))
-            min_x, max_x, min_y, max_y, width, height = raw_bounds
+            min_col, max_col, min_row, max_row, width, height = raw_bounds
             info_msg = (
                 f"Coordinate mapping:\n"
                 f"Image size: {img_width} x {img_height} pixels\n"
-                f"Raw data bounds: X=[{min_x:.2f}, {max_x:.2f}], Y=[{min_y:.2f}, {max_y:.2f}]\n"
-                f"Raw data size: {width:.2f} x {height:.2f}\n"
-                f"Scale factors: X={width/img_width:.4f}, Y={height/img_height:.4f}\n"
-                f"Y-axis orientation: {'down' if self.raw_data_y_axis_down else 'up'} (image is always down)"
+                f"Grid dimensions: {width} columns x {height} rows\n"
+                f"Grid bounds: Col=[{min_col:.0f}, {max_col:.0f}], Row=[{min_row:.0f}, {max_row:.0f}]\n"
+                f"Scale factors: Col={width/img_width:.4f}, Row={height/img_height:.4f}"
             )
         else:
             coords = pixel_coords
-            info_msg = "No raw data loaded - saving in pixel coordinates"
+            info_msg = "No grid mapping available - saving in pixel coordinates"
 
         # Show coordinate system info
         QtWidgets.QMessageBox.information(self, "Coordinate System", info_msg)
@@ -814,23 +796,23 @@ class ImageAnnotationApp(QtWidgets.QMainWindow):
 
         return rects
 
-    def _is_point_in_rectangles(
+    def _is_grid_cell_in_rectangles(
         self,
-        x: float,
-        y: float,
+        row: int,
+        col: int,
         rectangles: List[Tuple[float, float, float, float]]
     ) -> bool:
-        """Check if a point is inside any rectangle.
+        """Check if a grid cell is inside any rectangle.
 
         Args:
-            x, y: Point coordinates in raw data space
-            rectangles: List of (min_x, min_y, max_x, max_y) in raw data space
+            row, col: Grid cell indices
+            rectangles: List of (min_col, min_row, max_col, max_row) in grid coordinates
 
         Returns:
-            True if point is inside any rectangle
+            True if cell is inside any rectangle
         """
-        for min_x, min_y, max_x, max_y in rectangles:
-            if min_x <= x <= max_x and min_y <= y <= max_y:
+        for min_col, min_row, max_col, max_row in rectangles:
+            if min_col <= col <= max_col and min_row <= row <= max_row:
                 return True
         return False
 
@@ -838,46 +820,61 @@ class ImageAnnotationApp(QtWidgets.QMainWindow):
         self,
         rectangles: List[Tuple[float, float, float, float]]
     ) -> Tuple[List[List[str]], int]:
-        """Apply masking to raw data based on rectangles.
+        """Apply masking to raw grid data based on rectangles.
 
-        Coordinates are properly matched between image space and raw data space,
-        accounting for size differences and Y-axis orientation.
+        For 2D grid data, rectangles specify grid cell ranges.
+        Masked cells have their values set to 9999.0.
 
         Args:
-            rectangles: List of (min_x, min_y, max_x, max_y) in raw data coordinates
+            rectangles: List of (min_col, min_row, max_col, max_row) in grid indices
 
         Returns:
             Tuple of (processed_data, points_masked_count).
         """
-        processed = []
-        points_masked = 0
-
-        for idx, row in enumerate(self.raw_data):
-            if len(row) < 2:
-                processed.append(row)
+        # Convert raw_data to numpy array for processing
+        grid_rows = []
+        for row in self.raw_data:
+            if len(row) == 0:
+                continue
+            try:
+                row_values = [float(val) for val in row]
+                grid_rows.append(row_values)
+            except ValueError:
+                # Skip non-numeric rows
                 continue
 
-            # Preserve header if present
-            if idx == 0:
-                try:
-                    float(row[0])
-                    float(row[1])
-                except ValueError:
-                    processed.append(row)
-                    continue
+        if not grid_rows:
+            return [], 0
 
-            try:
-                x = float(row[0])
-                y = float(row[1])
+        # Convert to numpy array
+        grid_data = np.array(grid_rows, dtype=float)
+        points_masked = 0
 
-                if self._is_point_in_rectangles(x, y, rectangles):
-                    new_row = [MASK_VALUE, MASK_VALUE] + row[2:]
-                    processed.append(new_row)
-                    points_masked += 1
-                else:
-                    processed.append(row)
-            except ValueError:
-                processed.append(row)
+        # Apply masking for each rectangle
+        for min_col, min_row, max_col, max_row in rectangles:
+            # Convert to integer indices
+            min_col_idx = int(min_col)
+            max_col_idx = int(max_col)
+            min_row_idx = int(min_row)
+            max_row_idx = int(max_row)
+
+            # Clamp to valid grid bounds
+            min_col_idx = max(0, min(min_col_idx, self.grid_width - 1))
+            max_col_idx = max(0, min(max_col_idx, self.grid_width - 1))
+            min_row_idx = max(0, min(min_row_idx, self.grid_height - 1))
+            max_row_idx = max(0, min(max_row_idx, self.grid_height - 1))
+
+            # Count cells to be masked in this rectangle
+            for r in range(min_row_idx, max_row_idx + 1):
+                for c in range(min_col_idx, max_col_idx + 1):
+                    if not np.isnan(grid_data[r, c]) and grid_data[r, c] != 9999.0:
+                        points_masked += 1
+                    grid_data[r, c] = 9999.0
+
+        # Convert back to list of lists with strings
+        processed = []
+        for row in grid_data:
+            processed.append([f"{val:.1f}" if not np.isnan(val) else "9999.0" for val in row])
 
         return processed, points_masked
 
@@ -914,24 +911,23 @@ class ImageAnnotationApp(QtWidgets.QMainWindow):
         # Show coordinate system info
         raw_bounds = self._get_raw_bounds()
         if raw_bounds:
-            min_x, max_x, min_y, max_y, width, height = raw_bounds
+            min_col, max_col, min_row, max_row, width, height = raw_bounds
             pixmap = self.image_item.pixmap()
             dpr = pixmap.devicePixelRatio() if pixmap else 1.0
             img_w = int(pixmap.width() * dpr)
             img_h = int(pixmap.height() * dpr)
 
             print("=" * 60)
-            print("COORDINATE SYSTEM MAPPING")
+            print("GRID MASKING COORDINATE MAPPING")
             print("=" * 60)
             print(f"Image dimensions: {img_w} x {img_h} pixels")
-            print(f"Raw data bounds: X=[{min_x:.2f}, {max_x:.2f}], Y=[{min_y:.2f}, {max_y:.2f}]")
-            print(f"Raw data size: {width:.2f} x {height:.2f}")
-            print(f"Scale factors: X={width/img_w:.6f}, Y={height/img_h:.6f}")
-            print(f"Y-axis orientation: Raw data {'DOWN' if self.raw_data_y_axis_down else 'UP'}, Image DOWN")
+            print(f"Grid dimensions: {width} columns x {height} rows")
+            print(f"Grid bounds: Col=[{min_col:.0f}, {max_col:.0f}], Row=[{min_row:.0f}, {max_row:.0f}]")
+            print(f"Scale factors: Col={width/img_w:.6f}, Row={height/img_h:.6f}")
             print(f"\nNumber of mask rectangles: {len(rectangles)}")
-            for idx, (min_x_rect, min_y_rect, max_x_rect, max_y_rect) in enumerate(rectangles):
-                print(f"  Rectangle {idx}: X=[{min_x_rect:.2f}, {max_x_rect:.2f}], "
-                      f"Y=[{min_y_rect:.2f}, {max_y_rect:.2f}]")
+            for idx, (min_col_rect, min_row_rect, max_col_rect, max_row_rect) in enumerate(rectangles):
+                print(f"  Rectangle {idx}: Col=[{min_col_rect:.0f}, {max_col_rect:.0f}], "
+                      f"Row=[{min_row_rect:.0f}, {max_row_rect:.0f}]")
             print("=" * 60)
 
         # Apply masking
@@ -948,13 +944,13 @@ class ImageAnnotationApp(QtWidgets.QMainWindow):
             with open(out_path, "w", newline="") as f:
                 writer = csv.writer(f, delimiter=self.raw_delimiter)
                 writer.writerows(processed)
+            total_cells = self.grid_height * self.grid_width
             QtWidgets.QMessageBox.information(
                 self,
                 "Success",
                 f"Raw_mask.txt saved to {out_path}\n\n"
-                f"Points masked: {points_masked} / {len(self.raw_data)}\n"
-                f"Y-axis orientation: {'down' if self.raw_data_y_axis_down else 'up'} "
-                f"(toggle in Settings if incorrect)"
+                f"Grid cells masked: {points_masked} / {total_cells}\n"
+                f"Grid dimensions: {self.grid_width} columns x {self.grid_height} rows"
             )
         except Exception as e:
             QtWidgets.QMessageBox.critical(
