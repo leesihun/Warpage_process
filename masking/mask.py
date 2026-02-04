@@ -1108,7 +1108,6 @@ class ImageAnnotationApp(QtWidgets.QMainWindow):
 
         # Get the directory of the loaded file
         raw_dir = os.path.dirname(self.raw_path) if self.raw_path else os.getcwd()
-
         # Find all .txt and .rawtxt files in the directory
         txt_files = []
         for file in os.listdir(raw_dir):
