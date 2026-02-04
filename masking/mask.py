@@ -229,9 +229,9 @@ class ImageAnnotationApp(QtWidgets.QMainWindow):
         new_thickness, ok = QtWidgets.QInputDialog.getInt(
             self,
             "Set Border Thickness",
-            "Border Thickness: ",
+            "Border Thickness (0=thinnest): ",
             value=self.border_thickness,
-            min=1,
+            min=0,
             max=20
         )
         if ok:
