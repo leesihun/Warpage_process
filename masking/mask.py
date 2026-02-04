@@ -410,7 +410,7 @@ class ImageAnnotationApp(QtWidgets.QMainWindow):
             self,
             "Open Raw Data File",
             "",
-            "Raw Text Files (*.rawtxt)"
+            "Raw Text Files (*.txt)"
         )
         if not file_path:
             return
