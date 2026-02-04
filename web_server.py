@@ -990,7 +990,7 @@ if __name__ == '__main__':
         browser_thread.start()
     
     try:
-        app.run(host='127.0.0.1', port=WEB_PORT, debug=False, use_reloader=False, threaded=True)
+        app.run(host='0.0.0.0', port=WEB_PORT, debug=False, use_reloader=False, threaded=True)
     except KeyboardInterrupt:
         print("\nServer stopped")
     except Exception as e:

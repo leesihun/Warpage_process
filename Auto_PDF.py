@@ -3,7 +3,7 @@ import time
 import os
 from datetime import datetime, timedelta
 
-timeout = 30000000
+timeout = 2147483  # ~24.8 days (max safe value for C timeval on Windows)
 
 def generate_pdf(folder_name):
     try:

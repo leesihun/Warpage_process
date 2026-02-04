@@ -1,29 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(\"..\\.venv312\\Scripts\\python.exe\":*)",
-      "Bash(\"..\\.venv312\\Scripts\\python.exe\" -m PyInstaller --onefile --name \"DataAutoTransfer\" DataAutoTransfer_Simple.py --clean)",
-      "Bash(copy config.txt distconfig.txt)",
-      "Bash(curl -s \"https://raw.githubusercontent.com/leesihun/Warpage_process/main/data_autotransfer/main.py\")",
-      "Bash(curl -s \"https://raw.githubusercontent.com/leesihun/Warpage_process/main/data_autotransfer/config_parser.py\")",
-      "Bash(curl -s \"https://raw.githubusercontent.com/leesihun/Warpage_process/main/data_autotransfer/transfer_manager.py\")",
-      "Bash(curl:*)",
-      "Bash(del DataAutoTransfer_Simple.py)",
-      "Bash(rm:*)",
-      "Bash(...venv312Scriptspython.exe -m PyInstaller data_autotransfer.spec --clean)",
-      "Bash(python -m PyInstaller:*)",
-      "Bash(copy config.txt \"dist\\config.txt\")",
-      "Bash(\".venv312\\Scripts\\python.exe\" -m PyInstaller PEMTRON_Warpage_Tool.spec --clean)",
-      "Bash(tasklist)",
-      "Bash(taskkill:*)",
-      "Bash(findstr:*)",
-      "Bash(netstat:*)",
-      "Bash(start /B python:*)",
-      "Bash(python:*)",
-      "Bash(awk:*)",
-      "Bash(ls:*)",
-      "Bash(dir:*)",
-      "Bash(find . -maxdepth 1 -name \"*.py\" -exec grep -l \"torch\\|tensorflow\" {} ;)"
+      "Bash(python -m PyInstaller:*)"
     ],
     "deny": [],
     "ask": []
