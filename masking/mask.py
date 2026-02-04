@@ -349,26 +349,28 @@ class ImageAnnotationApp(QtWidgets.QMainWindow):
             if mask.any():
                 grid_z[mask] = np.nan
 
-            # Create figure
-            fig, ax = plt.subplots(figsize=(10, 8), dpi=100)
+            # Create figure with no padding or decorations
+            # Calculate figure size based on grid dimensions for proper aspect ratio
+            aspect_ratio = self.grid_width / self.grid_height
+            if aspect_ratio > 1:
+                fig_width = 10
+                fig_height = 10 / aspect_ratio
+            else:
+                fig_width = 10 * aspect_ratio
+                fig_height = 10
 
-            # Plot heatmap
-            im = ax.imshow(grid_z, cmap='jet', aspect='auto', interpolation='nearest')
+            fig, ax = plt.subplots(figsize=(fig_width, fig_height), dpi=100)
 
-            # Add colorbar
-            plt.colorbar(im, ax=ax, label='Warpage (μm)')
+            # Plot heatmap - just the image, no decorations
+            ax.imshow(grid_z, cmap='jet', aspect='auto', interpolation='nearest')
 
-            # Set title
-            ax.set_title(f'Warpage Heatmap: {os.path.basename(self.raw_path) if self.raw_path else "Unknown"}')
-            ax.set_xlabel('Column')
-            ax.set_ylabel('Row')
+            # Remove all axes, labels, and margins
+            ax.set_axis_off()
 
-            # Remove axis ticks for cleaner look
-            ax.set_xticks([])
-            ax.set_yticks([])
+            # Remove all padding and margins
+            plt.subplots_adjust(left=0, right=1, top=1, bottom=0, wspace=0, hspace=0)
 
             # Convert matplotlib figure to QPixmap
-            fig.tight_layout()
             fig.canvas.draw()
 
             # Get the RGBA buffer from the figure
