@@ -6,8 +6,10 @@ and applying masks to coordinate data.
 
 import csv
 import math
+import multiprocessing
 import os
 import sys
+from concurrent.futures import ProcessPoolExecutor
 from typing import List, Tuple, Optional
 
 import numpy as np
@@ -24,6 +26,142 @@ DEFAULT_FILL_OPACITY = 0.3
 MASK_COLOR = QtGui.QColor(255, 0, 0)
 MASK_VALUE = "9999.0"
 DEFAULT_DELIMITER = ","
+
+
+# ---------------------------------------------------------------------
+# Module-level worker function for parallel processing
+# ---------------------------------------------------------------------
+
+def _process_file_worker(args: Tuple[str, str, List[Tuple[float, float, float, float]]]) -> Tuple[str, bool, int, Optional[str]]:
+    """Worker function to process a single file for masking (for multiprocessing).
+
+    Args:
+        args: Tuple of (file_path, masked_dir, rectangles)
+
+    Returns:
+        Tuple of (filename, success, points_masked, error_message)
+    """
+    file_path, masked_dir, rectangles = args
+    filename = os.path.basename(file_path)
+
+    try:
+        # Load the grid file
+        with open(file_path, "r", newline="") as f:
+            sample = f.read(2048)
+            f.seek(0)
+
+            try:
+                dialect = csv.Sniffer().sniff(sample, delimiters=[',', '\t'])
+                delimiter = dialect.delimiter
+            except csv.Error:
+                delimiter = ','
+
+            reader = csv.reader(f, delimiter=delimiter)
+            grid_data = list(reader)
+
+        # Determine grid dimensions
+        grid_rows = []
+        for row in grid_data:
+            if len(row) == 0:
+                continue
+            try:
+                [float(val) for val in row]
+                grid_rows.append(len(row))
+            except ValueError:
+                continue
+
+        if not grid_rows:
+            return (filename, False, 0, "No valid numeric data found")
+
+        file_grid_height = len(grid_rows)
+        file_grid_width = max(grid_rows) if grid_rows else 0
+
+        # Apply masking
+        processed, points_masked = _mask_grid_data_worker(
+            grid_data,
+            rectangles,
+            file_grid_width,
+            file_grid_height
+        )
+
+        if not processed:
+            return (filename, False, 0, "Masking failed")
+
+        # Save to masked directory
+        out_path = os.path.join(masked_dir, filename)
+        with open(out_path, "w", newline="") as f:
+            writer = csv.writer(f, delimiter=delimiter)
+            writer.writerows(processed)
+
+        return (filename, True, points_masked, None)
+
+    except Exception as e:
+        return (filename, False, 0, str(e))
+
+
+def _mask_grid_data_worker(
+    grid_data: List[List[str]],
+    rectangles: List[Tuple[float, float, float, float]],
+    grid_width: int,
+    grid_height: int
+) -> Tuple[List[List[str]], int]:
+    """Apply masking to grid data (worker function for parallel processing).
+
+    Args:
+        grid_data: Raw grid data as list of lists
+        rectangles: List of (min_col, min_row, max_col, max_row) in grid indices
+        grid_width: Number of columns in the grid
+        grid_height: Number of rows in the grid
+
+    Returns:
+        Tuple of (processed_data, points_masked_count).
+    """
+    # Convert grid_data to numpy array for processing
+    grid_rows = []
+    for row in grid_data:
+        if len(row) == 0:
+            continue
+        try:
+            row_values = [float(val) for val in row]
+            grid_rows.append(row_values)
+        except ValueError:
+            continue
+
+    if not grid_rows:
+        return [], 0
+
+    # Convert to numpy array
+    grid_array = np.array(grid_rows, dtype=float)
+    points_masked = 0
+
+    # Apply masking for each rectangle
+    for min_col, min_row, max_col, max_row in rectangles:
+        # Convert to integer indices
+        min_col_idx = int(min_col)
+        max_col_idx = int(max_col)
+        min_row_idx = int(min_row)
+        max_row_idx = int(max_row)
+
+        # Clamp to valid grid bounds
+        min_col_idx = max(0, min(min_col_idx, grid_width - 1))
+        max_col_idx = max(0, min(max_col_idx, grid_width - 1))
+        min_row_idx = max(0, min(min_row_idx, grid_height - 1))
+        max_row_idx = max(0, min(max_row_idx, grid_height - 1))
+
+        # Count cells to be masked in this rectangle
+        for r in range(min_row_idx, max_row_idx + 1):
+            for c in range(min_col_idx, max_col_idx + 1):
+                if r < grid_array.shape[0] and c < grid_array.shape[1]:
+                    if not np.isnan(grid_array[r, c]) and grid_array[r, c] != 9999.0:
+                        points_masked += 1
+                    grid_array[r, c] = 9999.0
+
+    # Convert back to list of lists with strings
+    processed = []
+    for row in grid_array:
+        processed.append([f"{val:.1f}" if not np.isnan(val) else "9999.0" for val in row])
+
+    return processed, points_masked
 
 
 class ImageView(QtWidgets.QGraphicsView):
@@ -1011,68 +1149,31 @@ class ImageAnnotationApp(QtWidgets.QMainWindow):
                       f"Row=[{min_row_rect:.0f}, {max_row_rect:.0f}]")
             print("=" * 60)
 
-        # Process each file
+        # Process files in parallel using up to half the available CPU cores
+        max_workers = max(1, multiprocessing.cpu_count() // 2)
+        print(f"\nProcessing {len(txt_files)} files using {max_workers} workers...")
+
         total_files_processed = 0
         total_points_masked = 0
         failed_files = []
 
-        for file_path in txt_files:
-            filename = os.path.basename(file_path)
-            print(f"\nProcessing: {filename}")
+        # Prepare arguments for parallel processing
+        tasks = [(file_path, masked_dir, rectangles) for file_path in txt_files]
 
-            # Load the file
-            result = self._load_grid_file(file_path)
-            if result is None:
-                failed_files.append(filename)
-                continue
+        # Process files in parallel
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            results = list(executor.map(_process_file_worker, tasks))
 
-            grid_data, delimiter = result
-
-            # Determine grid dimensions for this file
-            grid_rows = []
-            for row in grid_data:
-                if len(row) == 0:
-                    continue
-                try:
-                    [float(val) for val in row]
-                    grid_rows.append(len(row))
-                except ValueError:
-                    continue
-
-            if not grid_rows:
-                print(f"  Skipped: No valid numeric data found")
-                failed_files.append(filename)
-                continue
-
-            file_grid_height = len(grid_rows)
-            file_grid_width = max(grid_rows) if grid_rows else 0
-
-            # Apply masking
-            processed, points_masked = self._mask_grid_data(
-                grid_data,
-                rectangles,
-                file_grid_width,
-                file_grid_height
-            )
-
-            if not processed:
-                print(f"  Skipped: Masking failed")
-                failed_files.append(filename)
-                continue
-
-            # Save to masked directory
-            out_path = os.path.join(masked_dir, filename)
-            try:
-                with open(out_path, "w", newline="") as f:
-                    writer = csv.writer(f, delimiter=delimiter)
-                    writer.writerows(processed)
-
+        # Collect results
+        for filename, success, points_masked, error_msg in results:
+            if success:
                 total_files_processed += 1
                 total_points_masked += points_masked
-                print(f"  Masked {points_masked} points -> {os.path.join('masked', filename)}")
-            except Exception as e:
-                print(f"  Error saving: {e}")
+                print(f"  {filename}: Masked {points_masked} points")
+            else:
                 failed_files.append(filename)
+                if error_msg:
+                    print(f"  {filename}: Failed - {error_msg}")
 
         print("=" * 60)
         print(f"\nMasking complete:")
@@ -1102,6 +1203,7 @@ class ImageAnnotationApp(QtWidgets.QMainWindow):
 
 def main():
     """Application entry point."""
+    multiprocessing.freeze_support()  # Required for multiprocessing in PyInstaller executables
     app = QtWidgets.QApplication(sys.argv)
     window = ImageAnnotationApp()
     window.show()
