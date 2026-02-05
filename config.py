@@ -195,7 +195,6 @@ SCAN_CONFIG = {
     'max_scan_threads': 64,         # 최대 스캔 스레드 수 / Maximum number of threads for parallel scanning
     'per_directory_timeout': 5     # 디렉토리당 타임아웃 (초) / Timeout per directory in seconds
 }
-
 # === Streaming Data Loading Configuration ===
 # Settings for memory-efficient data loading using streaming line processing
 STREAMING_CONFIG = {
