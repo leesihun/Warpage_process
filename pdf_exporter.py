@@ -552,7 +552,7 @@ def export_to_pdf_from_webui_plots(plots_data, folder_data, output_filename='war
 
 
 def export_to_pdf(folder_data, output_filename='warpage_analysis.pdf',
-                  include_stats=True, include_3d=True, include_advanced=True, dpi=150, cmap='jet', colorbar=True, vmin=None, vmax=None, optimize_for_pdf=None, config=None):
+                  include_stats=True, include_3d=True, include_advanced=True, dpi=150, cmap='jet', colorbar=True, vmin=None, vmax=None, optimize_for_pdf=None, config=None, plot_config=None):
     """
     Export comprehensive warpage analysis to high-resolution PDF in report directory.
 
@@ -567,6 +567,8 @@ def export_to_pdf(folder_data, output_filename='warpage_analysis.pdf',
         colorbar (bool): Whether to show colorbar
         vmin (float, optional): Minimum value for color scale
         vmax (float, optional): Maximum value for color scale
+        plot_config (dict, optional): Plot configuration dictionary to control which plots are generated.
+                                      If None, uses PLOT_CONFIG from config.py.
 
     Returns:
         str: Path to created PDF file
@@ -582,6 +584,11 @@ def export_to_pdf(folder_data, output_filename='warpage_analysis.pdf',
     if optimize_for_pdf is None:
         from config import DEFAULT_CONFIG
         optimize_for_pdf = DEFAULT_CONFIG.get('optimize_pdf_data', True)
+
+    # Load plot_config if not provided
+    if plot_config is None:
+        from config import PLOT_CONFIG
+        plot_config = PLOT_CONFIG
 
     if optimize_for_pdf:
         print("DEBUG: PDF optimization enabled - data will be resized for faster generation")
@@ -648,7 +655,7 @@ def export_to_pdf(folder_data, output_filename='warpage_analysis.pdf',
         # Advanced statistical analysis pages (if requested and available)
         if include_advanced and len(folder_data) > 1 and advanced_funcs:
             try:
-                advanced_analysis = advanced_funcs['create_comprehensive_advanced_analysis'](folder_data)
+                advanced_analysis = advanced_funcs['create_comprehensive_advanced_analysis'](folder_data, plot_config=plot_config)
                 if advanced_analysis:
                     for fig, title in advanced_analysis:
                         pdf.savefig(fig, dpi=dpi_advanced, bbox_inches='tight')
@@ -656,9 +663,9 @@ def export_to_pdf(folder_data, output_filename='warpage_analysis.pdf',
                 gc.collect()
             except Exception:
                 pass  # Skip if advanced analysis fails
-        
-        # 3D surface plots (if requested)
-        if include_3d and len(folder_data) > 0:
+
+        # 3D surface plots (if requested and enabled in plot_config)
+        if include_3d and len(folder_data) > 0 and plot_config.get('enable_3d_surface', True):
             try:
                 surface_figures = viz.create_3d_surface_plot(folder_data, figsize=(A4_LANDSCAPE_WIDTH, A4_LANDSCAPE_HEIGHT), optimize_for_pdf=True, config=config)
                 if surface_figures:

@@ -361,7 +361,8 @@ def create_comparison_plot(folder_data, figsize=(11.69, 8.27), vmin=None, vmax=N
     files_per_page = 16  # 4x4 format
     figures = []
 
-    # Pre-calculate global vmin/vmax for consistency and speed
+    # OPTIMIZED: Only calculate vmin/vmax if not already provided
+    # When called from web_server.py analyze(), these are pre-calculated
     if vmin is None or vmax is None:
         all_mins, all_maxs = [], []
         for _, (data, _, _) in files:
@@ -427,9 +428,17 @@ def create_comparison_plot(folder_data, figsize=(11.69, 8.27), vmin=None, vmax=N
         for j in range(n_page_files, 16):
             axes_flat[j].set_visible(False)
 
-        # Single colorbar for efficiency
+        # Single colorbar for efficiency with consistent ticks
         if colorbar and images:
-            fig.colorbar(images[0], ax=axes_flat[:n_page_files], shrink=0.6, label='Warpage Value')
+            cbar = fig.colorbar(images[0], ax=axes_flat[:n_page_files], shrink=0.6)
+            # Set explicit ticks for consistency when vmin/vmax are provided
+            if vmin is not None and vmax is not None:
+                cbar_ticks = np.linspace(vmin, vmax, 7)
+                cbar.set_ticks(cbar_ticks)
+                cbar.set_ticklabels([f'{t:.1f}' for t in cbar_ticks])
+                cbar.set_label(f'Warpage Value (μm)\nScale: {vmin:.1f} to {vmax:.1f}')
+            else:
+                cbar.set_label('Warpage Value')
 
         figures.append(fig)
 
@@ -540,10 +549,19 @@ def create_individual_plot(file_id, data, stats, filename, figsize=(8.27, 11.69)
     ax.set_yticks(np.linspace(0, rows-1, 5))
     ax.tick_params(axis='both', which='major', labelsize=8)
 
-    # Streamlined colorbar
+    # Streamlined colorbar with consistent ticks across all plots
     if colorbar:
         cbar = fig.colorbar(im, ax=ax, shrink=0.5)
-        cbar.set_label('Warpage Value (μm)', fontsize=9)
+
+        # Set explicit colorbar ticks for consistency when vmin/vmax are provided
+        if vmin is not None and vmax is not None:
+            # Create evenly spaced ticks from vmin to vmax
+            cbar_ticks = np.linspace(vmin, vmax, 7)  # 7 ticks for good readability
+            cbar.set_ticks(cbar_ticks)
+            cbar.set_ticklabels([f'{t:.1f}' for t in cbar_ticks])
+            cbar.set_label(f'Warpage Value (μm)\nScale: {vmin:.1f} to {vmax:.1f}', fontsize=9)
+        else:
+            cbar.set_label('Warpage Value (μm)', fontsize=9)
 
         # Compact statistics with reduced precision for speed
         stats_text = f"Shape: {stats['shape']}\nMin: {stats['min']:.3f}\nMax: {stats['max']:.3f}\nMean: {stats['mean']:.3f}\nStd: {stats['std']:.3f}"

@@ -1064,7 +1064,7 @@ def _should_show_legend(folder_data, max_files=100):
     """
     return len(folder_data) <= max_files
 
-def create_comprehensive_advanced_analysis(folder_data, figsize=(8.27, 11.69), vmin=None, vmax=None):
+def create_comprehensive_advanced_analysis(folder_data, figsize=(8.27, 11.69), vmin=None, vmax=None, plot_config=None):
     """
     모든 고급 통계 분석 생성 / Create comprehensive advanced statistical analysis
 
@@ -1073,6 +1073,8 @@ def create_comprehensive_advanced_analysis(folder_data, figsize=(8.27, 11.69), v
         figsize (tuple): Figure size for each plot
         vmin (float, optional): Minimum value for color scale
         vmax (float, optional): Maximum value for color scale
+        plot_config (dict, optional): Plot configuration dictionary to control which plots are generated.
+                                      If None, all plots are generated.
 
     Returns:
         list: List of matplotlib figures for advanced analysis
@@ -1085,17 +1087,42 @@ def create_comprehensive_advanced_analysis(folder_data, figsize=(8.27, 11.69), v
     show_legend = _should_show_legend(folder_data, max_files=100)
     if not show_legend:
         print(f"Note: Hiding legends for advanced plots due to large number of files ({len(folder_data)} > 100)")
-    
+
     # 사용할 분석 함수들 (사용자가 요청하지 않은 것들 제외)
     # Analysis functions to use (excluding user-specified exclusions)
-    excluded_analyses = ['box_plots', 'signal_to_noise', 'moving_averages', 
+    excluded_analyses = ['box_plots', 'signal_to_noise', 'moving_averages',
                         'correlation_between_points', 'stability_between_measurements', 'fourier_analysis']
-    
+
+    # Mapping from ADVANCED_PLOT_FUNCTIONS keys to PLOT_CONFIG keys
+    plot_config_mapping = {
+        'violin_plots': 'enable_violin_plots',
+        'cdf_plots': 'enable_cdf_plots',
+        'gradient_analysis': 'enable_gradient_analysis',
+        'contour_plots': 'enable_contour_plots',
+        'cross_sectional_profiles': 'enable_cross_sectional_profiles',
+        'percentile_analysis': 'enable_percentile_analysis',
+        'hotspot_analysis': 'enable_hotspot_analysis',
+        'heatmap_overlays': 'enable_heatmap_overlays',
+        'correlation_analysis': 'enable_correlation_analysis',
+        'pca_visualization': 'enable_pca_visualization',
+        'clustering_visualization': 'enable_clustering_visualization',
+        'stability_metrics': 'enable_stability_metrics',
+    }
+
     # 생성할 분석들 / Analyses to create
     analyses_to_create = []
     for name, func in ADVANCED_PLOT_FUNCTIONS.items():
-        if name not in excluded_analyses:
-            analyses_to_create.append((name, func))
+        if name in excluded_analyses:
+            continue
+
+        # Check if this plot is enabled in the configuration
+        if plot_config is not None:
+            config_key = plot_config_mapping.get(name)
+            if config_key and not plot_config.get(config_key, True):
+                print(f"  Skipping {name} (disabled in plot_config)")
+                continue
+
+        analyses_to_create.append((name, func))
     
     print(f"Creating {len(analyses_to_create)} advanced statistical analyses...")
     
